@@ -26,6 +26,14 @@ router.get('/posts/:id', userController.getPostById);
 router.put('/posts/:id', userController.updatePost);
 router.delete('/posts/:id', userController.deletePost);
 
+// Post Like/Unlike
+router.post('/posts/:id/like', userController.likePost);
+router.delete('/posts/:id/like', userController.unlikePost);
+
+// Comments CRUD
+router.post('/posts/:id/comments', userController.addComment);
+router.delete('/comments/:id', userController.deleteComment);
+
 // Membership CRUD
 router.post('/memberships', userController.createMembership);
 router.get('/memberships', userController.getMemberships);

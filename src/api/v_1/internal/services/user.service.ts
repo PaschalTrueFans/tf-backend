@@ -147,6 +147,7 @@ export class UserService {
         public: (post.accessType || 'free') === 'free',
         totalLikes: parseInt(post.totalLikes) || 0,
         totalComments: parseInt(post.totalComments) || 0,
+        mediaFiles: post.mediaFiles || [],
       })),
       exploreOthers: [
         {
@@ -236,6 +237,7 @@ export class UserService {
         public: (post.accessType || 'free') === 'free',
         totalLikes: parseInt(post.totalLikes) || 0,
         totalComments: parseInt(post.totalComments) || 0,
+        mediaFiles: post.mediaFiles || [],
       })),
       exploreOthers: [
         {
@@ -425,6 +427,13 @@ export class UserService {
     const row = await this.db.v1.User.GetPostById(postId);
     if (!row) return null;
     
+    // Check if current user has liked this post
+    let isLiked = false;
+    if (userId) {
+      const existingLike = await this.db.v1.User.GetPostLike(postId, userId);
+      isLiked = !!existingLike;
+    }
+    
     return {
       id: row.id,
       createdAt: row.createdAt,
@@ -435,6 +444,7 @@ export class UserService {
       accessType: row.accessType,
       tags: row.tags,
       totalLikes: parseInt(row.totalLikes) || 0,
+      isLiked: isLiked,
       creatorName: row.creatorName,
       creatorImage: row.creatorImage,
       categoryName: row.categoryName,
@@ -547,5 +557,76 @@ export class UserService {
     }
 
     await this.db.v1.User.DeleteMembership(membershipId);
+  }
+
+  // Comment CRUD methods
+  public async AddComment(postId: string, userId: string, comment: string): Promise<string> {
+    Logger.info('UserService.AddComment', { postId, userId, comment: comment.substring(0, 50) + '...' });
+
+    // Verify that the post exists
+    const post = await this.db.v1.User.GetPostById(postId);
+    if (!post) {
+      throw new BadRequest('Post not found');
+    }
+
+    // Verify that the user exists
+    const user = await this.db.v1.User.GetUser({ id: userId });
+    if (!user) {
+      throw new BadRequest('User not found');
+    }
+
+    const commentId = await this.db.v1.User.AddComment(postId, userId, comment);
+    return commentId;
+  }
+
+  public async DeleteComment(commentId: string, userId: string): Promise<void> {
+    Logger.info('UserService.DeleteComment', { commentId, userId });
+
+    // Verify that the user exists
+    const user = await this.db.v1.User.GetUser({ id: userId });
+    if (!user) {
+      throw new BadRequest('User not found');
+    }
+
+    await this.db.v1.User.DeleteComment(commentId, userId);
+  }
+
+  public async LikePost(postId: string, userId: string): Promise<{ isLiked: boolean; totalLikes: number }> {
+    Logger.info('UserService.LikePost', { postId, userId });
+
+
+    // Check if user already liked the post
+    const existingLike = await this.db.v1.User.GetPostLike(postId, userId);
+    if (existingLike) {
+      throw new BadRequest('You have already liked this post');
+    }
+
+    // Add the like and increment totalLikes
+    const totalLikes = await this.db.v1.User.LikePost(postId, userId);
+
+    return {
+      isLiked: true,
+      totalLikes
+    };
+  }
+
+  public async UnlikePost(postId: string, userId: string): Promise<{ isLiked: boolean; totalLikes: number }> {
+    Logger.info('UserService.UnlikePost', { postId, userId });
+
+
+
+    // Check if user has liked the post
+    const existingLike = await this.db.v1.User.GetPostLike(postId, userId);
+    if (!existingLike) {
+      throw new BadRequest('You have not liked this post');
+    }
+
+    // Remove the like and decrement totalLikes
+    const totalLikes = await this.db.v1.User.UnlikePost(postId, userId);
+
+    return {
+      isLiked: false,
+      totalLikes
+    };
   }
 }

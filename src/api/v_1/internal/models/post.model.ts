@@ -56,4 +56,10 @@ export interface PostDetail extends DefaultTable {
   }>;
 }
 
+export const AddCommentBodySchema = z.object({
+  comment: z.string().min(1).max(1000),
+});
+
+export type AddCommentBody = z.infer<typeof AddCommentBodySchema>;
+
 

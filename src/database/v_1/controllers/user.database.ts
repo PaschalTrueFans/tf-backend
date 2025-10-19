@@ -463,15 +463,23 @@ export class UserDatabase {
     const knexdb = this.GetKnex();
     const query = knexdb('posts')
       .leftJoin('postComments', 'posts.id', 'postComments.postId')
+      .leftJoin('postsMediaFiles', 'posts.id', 'postsMediaFiles.postId')
       .where('posts.creatorId', creatorId)
-      .groupBy('posts.id')
+      .groupBy([
+        'posts.id',
+        'posts.title',
+        'posts.createdAt',
+        'posts.accessType',
+        'posts.totalLikes'
+      ])
       .select([
         'posts.id',
         'posts.title',
         'posts.createdAt',
         'posts.accessType',
         'posts.totalLikes',
-        knexdb.raw('COUNT("postComments".id) as "totalComments"'),
+        knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
+        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "mediaFiles"')
       ])
       .orderBy('posts.createdAt', 'desc');
 
@@ -617,6 +625,157 @@ export class UserDatabase {
     if (err) {
       this.logger.error('Db.DeleteMembership failed', err);
       throw new AppError(400, 'Membership delete failed');
+    }
+  }
+
+  // Comment CRUD methods
+  async AddComment(postId: string, userId: string, comment: string): Promise<string> {
+    this.logger.info('Db.AddComment', { postId, userId, comment });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('postComments').insert({ postId, userId, comment }, 'id');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.AddComment failed', err);
+      throw new AppError(400, 'Comment not created');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.AddComment Comment not created', err);
+      throw new AppError(400, 'Comment not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
+  async DeleteComment(commentId: string, userId: string): Promise<void> {
+    this.logger.info('Db.DeleteComment', { commentId, userId });
+
+    const knexdb = this.GetKnex();
+    
+    // First check if the comment exists and belongs to the user
+    const commentQuery = knexdb('postComments')
+      .where({ id: commentId, userId })
+      .first();
+    
+    const { res: commentRes, err: commentErr } = await this.RunQuery(commentQuery);
+    if (commentErr) {
+      this.logger.error('Db.DeleteComment failed to check comment ownership', commentErr);
+      throw new AppError(400, 'Failed to verify comment ownership');
+    }
+
+    if (!commentRes) {
+      throw new AppError(404, 'Comment not found or you do not have permission to delete it');
+    }
+
+    // Delete the comment
+    const deleteQuery = knexdb('postComments').where({ id: commentId, userId }).del();
+    const { err } = await this.RunQuery(deleteQuery);
+
+    if (err) {
+      this.logger.error('Db.DeleteComment failed', err);
+      throw new AppError(400, 'Comment delete failed');
+    }
+  }
+
+  async GetPostLike(postId: string, userId: string): Promise<any> {
+    this.logger.info('Db.GetPostLike', { postId, userId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('postLikes')
+      .where({ postId, userId })
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetPostLike failed', err);
+      throw new AppError(400, 'Failed to check post like status');
+    }
+
+    return res?.[0] || null;
+  }
+
+  async LikePost(postId: string, userId: string): Promise<number> {
+    this.logger.info('Db.LikePost', { postId, userId });
+
+    const knexdb = this.GetKnex();
+    
+    // Use transaction to ensure both operations succeed or fail together
+    const trx = await knexdb.transaction();
+    
+    try {
+      // Insert like record
+      const likeData = {
+        id: knexdb.raw('gen_random_uuid()'),
+        postId,
+        userId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      await trx('postLikes').insert(likeData);
+
+      // Increment totalLikes in posts table
+      const updateResult = await trx('posts')
+        .where({ id: postId })
+        .increment('totalLikes', 1)
+        .returning('totalLikes');
+
+      await trx.commit();
+
+      return parseInt(updateResult?.[0]?.totalLikes || '0', 10);
+    } catch (error) {
+      await trx.rollback();
+      this.logger.error('Db.LikePost failed', error);
+      throw new AppError(400, 'Failed to like post');
+    }
+  }
+
+  async UnlikePost(postId: string, userId: string): Promise<number> {
+    this.logger.info('Db.UnlikePost', { postId, userId });
+
+    const knexdb = this.GetKnex();
+    
+    // Use transaction to ensure both operations succeed or fail together
+    const trx = await knexdb.transaction();
+    
+    try {
+      // Delete like record
+      const deleteResult = await trx('postLikes')
+        .where({ postId, userId })
+        .del();
+
+      if (deleteResult === 0) {
+        await trx.rollback();
+        throw new AppError(400, 'Like not found');
+      }
+
+      // Decrement totalLikes in posts table (with safety check)
+      const currentQuery = await trx('posts')
+        .select('totalLikes')
+        .where({ id: postId })
+        .first();
+
+      const currentLikes = parseInt(currentQuery?.totalLikes || '0', 10);
+      
+      let newTotalLikes = currentLikes;
+      if (currentLikes > 0) {
+        const updateResult = await trx('posts')
+          .where({ id: postId })
+          .decrement('totalLikes', 1)
+          .returning('totalLikes');
+        
+        newTotalLikes = parseInt(updateResult?.[0]?.totalLikes || '0', 10);
+      }
+
+      await trx.commit();
+      return newTotalLikes;
+    } catch (error) {
+      await trx.rollback();
+      this.logger.error('Db.UnlikePost failed', error);
+      throw new AppError(400, 'Failed to unlike post');
     }
   }
 }

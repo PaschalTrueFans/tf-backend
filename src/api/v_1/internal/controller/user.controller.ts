@@ -295,4 +295,77 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Comment CRUD handlers
+  public addComment = async (req: RequestBody<PostModel.AddCommentBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await PostModel.AddCommentBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const postId = req.params.id;
+      const userId = req.userId;
+      const commentId = await service.AddComment(postId, userId, req.body.comment);
+
+      body = { 
+        message: 'Comment added successfully',
+        data: { id: commentId } 
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public deleteComment = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const commentId = req.params.id;
+      const userId = req.userId;
+      await service.DeleteComment(commentId, userId);
+      body = { message: 'Comment deleted successfully' };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Post Like/Unlike handlers
+  public likePost = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const postId = req.params.id;
+      const userId = req.userId;
+      const result = await service.LikePost(postId, userId);
+      body = { 
+        message: 'Post liked successfully',
+        data: result
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public unlikePost = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const postId = req.params.id;
+      const userId = req.userId;
+      const result = await service.UnlikePost(postId, userId);
+      body = { 
+        message: 'Post unliked successfully',
+        data: result
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
 }
