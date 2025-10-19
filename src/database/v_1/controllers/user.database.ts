@@ -414,8 +414,9 @@ export class UserDatabase {
     };
   }
 
-  public async GetAllPostsByFollowedCreator(userId: string): Promise<any[]> {
+  public async GetAllPostsByFollowedCreator(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
     const knexdb = this.GetKnex();
+    const offset = (page - 1) * limit;
    
     const query = knexdb('posts')
       .leftJoin('postComments', 'posts.id', 'postComments.postId')
@@ -447,7 +448,9 @@ export class UserDatabase {
         knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
         knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"')
       ])
-      .orderBy('posts.createdAt', 'desc');
+      .orderBy('posts.createdAt', 'desc')
+      .limit(limit)
+      .offset(offset);
   
     const { res, err } = await this.RunQuery(query);
     if (err) throw new AppError(400, 'Failed to fetch posts');
@@ -474,6 +477,57 @@ export class UserDatabase {
 
     const { res, err } = await this.RunQuery(query);
     if (err) throw new AppError(400, 'Failed to fetch recent posts');
+    return res ?? [];
+  }
+
+  async GetPublicPostsByOtherCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
+    this.logger.info('Db.GetPublicPostsByOtherCreators', { userId, page, limit });
+
+    const knexdb = this.GetKnex();
+    const offset = (page - 1) * limit;
+
+    const query = knexdb('posts')
+      .leftJoin('postComments', 'posts.id', 'postComments.postId')
+      .leftJoin('postsMediaFiles', 'posts.id', 'postsMediaFiles.postId')
+      .innerJoin('users', 'posts.creatorId', 'users.id') // Get creator info
+      .leftJoin('followers', function() {
+        this.on('posts.creatorId', '=', 'followers.userId')
+            .andOn('followers.followerId', '=', knexdb.raw('?', [userId]));
+      })
+      .where('posts.accessType', 'free') // Only public posts
+      .whereNot('posts.creatorId', userId) // Exclude user's own posts
+      .whereNull('followers.id') // Exclude posts from followed creators (they're handled separately)
+      .groupBy([
+        'posts.id',
+        'posts.title',
+        'posts.content',
+        'posts.createdAt',
+        'posts.tags',
+        'posts.totalLikes',
+        'posts.creatorId',
+        'users.id',
+        'users.profilePhoto',
+        'users.pageName'
+      ])
+      .select([
+        'posts.id as postId',
+        'posts.title as postTitle',
+        'posts.content',
+        'posts.createdAt',
+        'posts.tags',
+        'posts.totalLikes',
+        'posts.creatorId',
+        'users.profilePhoto as creatorImage',
+        'users.pageName as pageName',
+        knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
+        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"')
+      ])
+      .orderBy('posts.createdAt', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    const { res, err } = await this.RunQuery(query);
+    if (err) throw new AppError(400, 'Failed to fetch public posts');
     return res ?? [];
   }
 

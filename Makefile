@@ -18,6 +18,7 @@ local-only-cleanup-database:
 	npm run local-only-cleanup-database
 ssh:
 	sudo ssh -i ./pem/true-fans-dev.pem ubuntu@54.177.131.12
+	
 ssh-prod:
 	sudo ssh -i ./pem/fileName.pem ubuntu@IP_ADDRESS
 .PHONY: prepare migrate build dev stop implode logs start-prod local-only-cleanup-database

@@ -92,7 +92,7 @@ export class UserService {
       introVideo: creator.introVideo,
       themeColor: creator.themeColor,
       socialLinks: creator.socialLinks,
-      isFollowing: creator.isFollowing,
+      isFollowing: creator.isfollowing,
       followersCount: parseInt(creator.followersCount) || 0,
       tags: creator.tags || ['music', 'videos', 'entertainment'],
       category: creator.category || 'music',
@@ -333,8 +333,18 @@ export class UserService {
     await this.db.v1.User.DeletePost(postId);
   }
 
-  public async GetAllPosts(userId: string): Promise<any[]> {
-    Logger.info('UserService.GetAllPosts', { userId });
+  public async GetAllPosts(userId: string, page: number = 1, limit: number = 10): Promise<{
+    posts: any[];
+    pagination: {
+      currentPage: number;
+      limit: number;
+      totalPosts: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    };
+  }> {
+    Logger.info('UserService.GetAllPosts', { userId, page, limit });
 
 // Three types of POSTS
 // 1. Paid Posts membership based
@@ -344,13 +354,29 @@ export class UserService {
 // 1. Paid Posts membership based
 
 // 2. Posts by followed creators
-    const rows = await this.db.v1.User.GetAllPostsByFollowedCreator(userId);
+    const followedPosts = await this.db.v1.User.GetAllPostsByFollowedCreator(userId, page, limit);
 
 // 3. Free Posts By Other Creators 
+    const publicPosts = await this.db.v1.User.GetPublicPostsByOtherCreators(userId, page, limit);
 
+    // Combine posts from both sources
+    const allPosts = [...followedPosts, ...publicPosts];
+    
+    // Sort by creation date (most recent first)
+    allPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+    // Apply pagination to combined results
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedPosts = allPosts.slice(startIndex, endIndex);
 
-    return rows.map((r: any) => ({
+    // Calculate pagination metadata
+    const totalPosts = allPosts.length;
+    const totalPages = Math.ceil(totalPosts / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    const posts = paginatedPosts.map((r: any) => ({
       postId: r.postId,
       postTitle: r.postTitle,
       content: this.stripHtmlAndTruncate(r.content, 100),
@@ -363,6 +389,18 @@ export class UserService {
       totalLikes: parseInt(r.totalLikes) || 0,
       totalComments: parseInt(r.totalComments) || 0,
     }));
+
+    return {
+      posts,
+      pagination: {
+        currentPage: page,
+        limit,
+        totalPosts,
+        totalPages,
+        hasNextPage,
+        hasPrevPage,
+      },
+    };
   }
 
   private stripHtmlAndTruncate(content: string, maxLength: number): string {
