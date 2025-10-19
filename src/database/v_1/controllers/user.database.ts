@@ -778,4 +778,43 @@ export class UserDatabase {
       throw new AppError(400, 'Failed to unlike post');
     }
   }
+
+  async GetSuggestedCreators(userId: string, limit: number = 5): Promise<any[]> {
+    this.logger.info('Db.GetSuggestedCreators', { userId, limit });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('users')
+      .select([
+        'users.*',
+        knexdb.raw('COUNT(followers.id) as followersCount'),
+        knexdb.raw('COUNT(posts.id) as totalPosts')
+      ])
+      .leftJoin('followers', 'users.id', 'followers.userId')
+      .leftJoin('posts', 'users.id', 'posts.creatorId')
+      .leftJoin('followers as user_follows', function () {
+        this.on('users.id', '=', 'user_follows.userId')
+            .andOn('user_follows.followerId', '=', knexdb.raw('?', [userId]));
+      })
+      .whereNotNull('users.pageName') // Only creators
+      .whereNot('users.id', userId) // Exclude current user
+      .whereNull('user_follows.id') // Exclude already followed creators
+      .groupBy('users.id')
+      // .orderBy('followersCount', 'desc') // Order by popularity using raw expression
+      .limit(limit);
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSuggestedCreators failed', err);
+      throw new AppError(400, 'Failed to fetch suggested creators');
+    }
+
+    if (!res) {
+      this.logger.info('Db.GetSuggestedCreators No suggested creators found');
+      return [];
+    }
+
+    return res;
+  }
 }

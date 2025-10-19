@@ -629,4 +629,31 @@ export class UserService {
       totalLikes
     };
   }
+
+  public async GetSuggestedCreators(userId: string, limit: number = 5): Promise<UserModels.CreatorProfile[]> {
+    Logger.info('UserService.GetSuggestedCreators', { userId, limit });
+
+    const creators = await this.db.v1.User.GetSuggestedCreators(userId, limit);
+
+    if (!creators) return [];
+
+    return creators.map((creator: any) => ({
+      id: creator.id,
+      pageName: creator.pageName!,
+      creatorName: creator.creatorName!,
+      is18Plus: creator.is18Plus || false,
+      profilePhoto: creator.profilePhoto,
+      bio: creator.bio,
+      coverPhoto: creator.coverPhoto,
+      introVideo: creator.introVideo,
+      themeColor: creator.themeColor,
+      socialLinks: creator.socialLinks,
+      isFollowing: false, // Since these are suggested creators, user is not following them
+      followersCount: parseInt(creator.followersCount) || 0,
+      tags: creator.tags || ['music', 'videos', 'entertainment'],
+      category: creator.category || 'music',
+      subscribersCount: parseInt(creator.subscribersCount) || 0,
+      totalPosts: parseInt(creator.totalPosts) || 0,
+    }));
+  }
 }

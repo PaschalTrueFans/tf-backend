@@ -368,4 +368,32 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Get suggested creators handler
+  public getSuggestedCreators = async (req: RequestQuery<{ limit?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      
+      // Parse limit parameter with default
+      const limit = parseInt(req.query.limit || '5', 10);
+      
+      // Validate limit parameter
+      if (limit < 1 || limit > 10) {
+        res.status(400).json({ error: 'Limit must be between 1 and 10' });
+        return;
+      }
+      
+      const response = await service.GetSuggestedCreators(userId, limit);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
 }

@@ -13,6 +13,7 @@ router.put('/', userController.updateUser);
 
 // Creator routes
 router.get('/creators', userController.getAllCreators);
+router.get('/creators/suggested', userController.getSuggestedCreators);
 router.get('/creator/:id', userController.getCreatorById);
 router.get('/creator/page/:pageName', userController.getCreatorByPageName);
 
