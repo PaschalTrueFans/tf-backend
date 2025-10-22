@@ -206,6 +206,35 @@ export class UserController {
     res.json(body);
   };
 
+  public getAllMyPosts = async (req: RequestQuery<{ page?: string; limit?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      
+      // Parse pagination parameters with defaults
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '10', 10);
+      
+      // Validate pagination parameters
+      if (page < 1) {
+        res.status(400).json({ error: 'Page must be greater than 0' });
+        return;
+      }
+      if (limit < 1 || limit > 100) {
+        res.status(400).json({ error: 'Limit must be between 1 and 100' });
+        return;
+      }
+      
+      const result = await service.GetAllMyPosts(userId, page, limit);
+      body = { data: result };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
   public getPostById = async (req: Request, res: Response): Promise<void> => {
     let body;
     try {

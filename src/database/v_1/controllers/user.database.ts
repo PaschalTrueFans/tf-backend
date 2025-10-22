@@ -697,6 +697,21 @@ export class UserDatabase {
     return res?.[0] || null;
   }
 
+  async GetAllMyPosts(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
+    this.logger.info('Db.GetAllMyPosts', { userId, page, limit });
+
+    const knexdb = this.GetKnex();
+    const offset = (page - 1) * limit;
+
+    const query = knexdb('posts')
+    .select('id' , 'title' ,'createdAt' , 'accessType')
+    .where({ creatorId: userId }).orderBy('createdAt', 'desc').limit(limit).offset(offset);
+      const { res, err } = await this.RunQuery(query);
+    if (err) throw new AppError(400, 'Failed to fetch my posts');
+    return res ?? [];
+  }
+  
+
   async LikePost(postId: string, userId: string): Promise<number> {
     this.logger.info('Db.LikePost', { postId, userId });
 

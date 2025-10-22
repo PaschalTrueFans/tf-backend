@@ -469,6 +469,37 @@ export class UserService {
     };
   }
 
+  async GetAllMyPosts(userId: string, page: number = 1, limit: number = 10): Promise<{
+    posts: any[];
+    pagination: {
+      currentPage: number;
+      limit: number;
+      totalPosts: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    };
+  }> {
+    Logger.info('UserService.GetAllMyPosts', { userId, page, limit });
+
+    const posts = await this.db.v1.User.GetAllMyPosts(userId, page, limit);
+    const totalPosts = posts.length;
+    const totalPages = Math.ceil(totalPosts / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+    return {
+      posts,
+      pagination: {
+        currentPage: page,
+        limit,
+        totalPosts,
+        totalPages,
+        hasNextPage,
+        hasPrevPage,
+      },
+    };
+  }
+
   // Membership CRUD methods with creator validation
   public async CreateMembership(creatorId: string, body: any): Promise<string> {
     Logger.info('UserService.CreateMembership', { creatorId, body });

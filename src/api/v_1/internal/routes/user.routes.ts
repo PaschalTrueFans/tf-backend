@@ -23,6 +23,7 @@ router.post('/creators/:id/follow', userController.toggleFollowCreator);
 // Posts CRUD
 router.post('/posts', userController.createPost);
 router.get('/posts', userController.getAllPosts);
+router.get('/my-posts', userController.getAllMyPosts);
 router.get('/posts/:id', userController.getPostById);
 router.put('/posts/:id', userController.updatePost);
 router.delete('/posts/:id', userController.deletePost);
