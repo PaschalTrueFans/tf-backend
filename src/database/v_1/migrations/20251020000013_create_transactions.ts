@@ -14,6 +14,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('stripeChargeId').nullable(); // Stripe charge ID
     table.string('stripeInvoiceId').nullable(); // Stripe invoice ID
     table.string('stripePaymentMethodId').nullable(); // Payment method used
+    table.string('stripeCustomerId').nullable(); // Stripe customer ID
     
     // Transaction Details
     table.string('transactionType').notNullable(); // subscription, payment, refund, chargeback, adjustment
@@ -24,6 +25,7 @@ export async function up(knex: Knex): Promise<void> {
     table.decimal('netAmount', 10, 2).nullable(); // Amount after fees
     
     // Billing Period (for subscription payments)
+    
     table.timestamp('billingPeriodStart').nullable(); // Billing period start
     table.timestamp('billingPeriodEnd').nullable(); // Billing period end
     
@@ -46,10 +48,6 @@ export async function up(knex: Knex): Promise<void> {
     // Timestamps
     table.timestamp('createdAt').defaultTo(knex.fn.now());
     table.timestamp('updatedAt').defaultTo(knex.fn.now());
-    
-    // Constraints
-    table.check('?? IN (?, ?, ?, ?, ?)', ['transactionType', 'subscription', 'payment', 'refund', 'chargeback', 'adjustment']);
-    table.check('?? IN (?, ?, ?, ?, ?)', ['status', 'succeeded', 'failed', 'pending', 'canceled', 'refunded']);
     
     // Indexes for better performance
     table.index(['subscriptionId']);

@@ -78,3 +78,47 @@ export interface Membership extends DefaultTable {
   currency: string;
   description?: string;
 }
+
+export interface Subscription extends DefaultTable {
+  subscriberId: string;
+  creatorId: string;
+  membershipId: string;
+  stripeSubscriptionId?: string;
+  stripeCustomerId?: string;
+  subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'incomplete' | 'trialing' | 'paused';
+  isActive: boolean;
+  amount: number;
+  currency: string;
+  startedAt?: string;
+  canceledAt?: string;
+  cancelReason?: string;
+}
+
+export interface Transaction extends DefaultTable {
+  subscriptionId: string;
+  subscriberId: string;
+  creatorId: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  stripeInvoiceId?: string;
+  stripePaymentMethodId?: string;
+  stripeCustomerId?: string;
+  transactionType: 'subscription' | 'payment' | 'refund' | 'chargeback' | 'adjustment';
+  status: 'succeeded' | 'failed' | 'pending' | 'canceled' | 'refunded';
+  amount: number;
+  currency: string;
+  fee?: number;
+  netAmount?: number;
+  billingPeriodStart?: string;
+  billingPeriodEnd?: string;
+  processedAt?: string;
+  failedAt?: string;
+  failureReason?: string;
+  retryCount: number;
+  refundAmount?: number;
+  refundedAt?: string;
+  refundReason?: string;
+  metadata?: any;
+  description?: string;
+  receiptUrl?: string;
+}

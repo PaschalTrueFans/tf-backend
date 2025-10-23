@@ -17,9 +17,6 @@ export async function up(knex: Knex): Promise<void> {
     table.string('subscriptionStatus').notNullable().defaultTo('active'); // active, canceled, past_due, incomplete, trialing, paused
     table.boolean('isActive').defaultTo(true); // Quick status check
     
-    // Basic subscription info
-    table.decimal('amount', 10, 2).notNullable(); // Monthly subscription amount
-    table.string('currency', 3).notNullable().defaultTo('NGN'); // Currency code
     
     // Subscription lifecycle
     table.timestamp('startedAt').nullable(); // When subscription started

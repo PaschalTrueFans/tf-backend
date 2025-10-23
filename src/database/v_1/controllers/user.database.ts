@@ -832,4 +832,145 @@ export class UserDatabase {
 
     return res;
   }
+
+  // Subscription Methods
+  async CreateSubscription(subscription: Partial<Entities.Subscription>): Promise<string> {
+    this.logger.info('Db.CreateSubscription', { subscription });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions').insert(subscription, 'id');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      if (err.code === DatabaseErrors.DUPLICATE) {
+        this.logger.error('Db.CreateSubscription failed due to duplicate key', err);
+        throw new AppError(400, 'Subscription already exists for this user-creator pair');
+      }
+      throw new AppError(400, 'Subscription not created');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.CreateSubscription Subscription not created', err);
+      throw new AppError(400, 'Subscription not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
+  async GetSubscriptionById(id: string): Promise<Entities.Subscription | null> {
+    this.logger.info('Db.GetSubscriptionById', { id });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions').where('id', id)
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSubscriptionById failed', err);
+      throw new AppError(400, 'Failed to get subscription');
+    }
+
+    if (!res) {
+      return null;
+    }
+
+    return res[0];
+  }
+
+  async GetSubscriptionsBySubscriberId(subscriberId: string): Promise<Entities.Subscription[]> {
+    this.logger.info('Db.GetSubscriptionsBySubscriberId', { subscriberId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('subscriberId', subscriberId)
+      .orderBy('createdAt', 'desc');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSubscriptionsBySubscriberId failed', err);
+      throw new AppError(400, 'Failed to get subscriptions');
+    }
+
+    if (!res) {
+      return [];
+    }
+
+    return res;
+  }
+
+  async GetSubscriptionsByCreatorId(creatorId: string): Promise<Entities.Subscription[]> {
+    this.logger.info('Db.GetSubscriptionsByCreatorId', { creatorId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('creatorId', creatorId)
+      .orderBy('createdAt', 'desc');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSubscriptionsByCreatorId failed', err);
+      throw new AppError(400, 'Failed to get subscriptions');
+    }
+
+    if (!res) {
+      return [];
+    }
+
+    return res;
+  }
+
+  async UpdateSubscriptionStatus(id: string, status: string, cancelReason?: string): Promise<void> {
+    this.logger.info('Db.UpdateSubscriptionStatus', { id, status, cancelReason });
+
+    const knexdb = this.GetKnex();
+
+    const updateData: any = {
+      subscriptionStatus: status,
+      updatedAt: knexdb.fn.now()
+    };
+
+    if (status === 'canceled') {
+      updateData.canceledAt = knexdb.fn.now();
+      if (cancelReason) {
+        updateData.cancelReason = cancelReason;
+      }
+    }
+
+    const query = knexdb('subscriptions').where('id', id).update(updateData);
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateSubscriptionStatus failed', err);
+      throw new AppError(400, 'Failed to update subscription status');
+    }
+  }
+
+  async CheckExistingSubscription(subscriberId: string, creatorId: string): Promise<Entities.Subscription | null> {
+    this.logger.info('Db.CheckExistingSubscription', { subscriberId, creatorId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('subscriberId', subscriberId)
+      .where('creatorId', creatorId)
+      .where('subscriptionStatus', 'active')
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CheckExistingSubscription failed', err);
+      throw new AppError(400, 'Failed to check existing subscription');
+    }
+
+    return res?.[0] || null;
+  }
 }

@@ -3,6 +3,7 @@ import { Response, Request } from 'express';
 import { Db } from '../../../../database/db';
 import { Logger } from '../../../../helpers/logger';
 import { genericError, RequestBody, RequestQuery } from '../../../../helpers/utils';
+import { BadRequest } from '../../../../helpers/errors';
 import { UserService } from '../services/user.service';
 import { Entities, Hash } from '../../../../helpers';
 import { jwtAuth } from '../middlewares/api-auth';
@@ -416,6 +417,97 @@ export class UserController {
       }
       
       const response = await service.GetSuggestedCreators(userId, limit);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Subscribe to creator handler
+  public subscribeToCreator = async (req: RequestBody<{ membershipId: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const { membershipId } = req.body;
+
+      if (!membershipId) {
+        throw new BadRequest('Membership ID is required');
+      }
+
+      const response = await service.SubscribeToCreator(userId, membershipId);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Get user subscriptions handler
+  public getUserSubscriptions = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      const response = await service.GetUserSubscriptions(userId);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Get creator subscribers handler
+  public getCreatorSubscribers = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.params.creatorId;
+
+      if (!creatorId) {
+        throw new BadRequest('Creator ID is required');
+      }
+
+      const response = await service.GetCreatorSubscribers(creatorId);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Cancel subscription handler
+  public cancelSubscription = async (req: RequestBody<{ reason?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const subscriptionId = req.params.subscriptionId;
+      const { reason } = req.body;
+
+      if (!subscriptionId) {
+        throw new BadRequest('Subscription ID is required');
+      }
+
+      const response = await service.CancelSubscription(userId, subscriptionId, reason);
 
       body = {
         data: response,

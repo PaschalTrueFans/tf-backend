@@ -687,4 +687,84 @@ export class UserService {
       totalPosts: parseInt(creator.totalPosts) || 0,
     }));
   }
+
+  // Subscription Methods
+  public async SubscribeToCreator(userId: string, membershipId: string): Promise<{ subscriptionId: string; message: string }> {
+    Logger.info('UserService.SubscribeToCreator', { userId, membershipId });
+
+    // Get membership details
+    const membership = await this.db.v1.User.GetMembershipById(membershipId);
+    if (!membership) {
+      throw new BadRequest('Membership not found');
+    }
+
+    // Check if user is trying to subscribe to themselves
+    if (membership.creatorId === userId) {
+      throw new BadRequest('Cannot subscribe to your own content');
+    }
+
+    // Check if user already has an active subscription to this creator
+    const existingSubscription = await this.db.v1.User.CheckExistingSubscription(userId, membership.creatorId);
+    if (existingSubscription) {
+      throw new BadRequest('You already have an active subscription to this creator');
+    }
+
+    // Create subscription
+    const subscriptionData: Partial<Entities.Subscription> = {
+      subscriberId: userId,
+      creatorId: membership.creatorId,
+      membershipId: membershipId,
+      subscriptionStatus: 'active',
+      isActive: true,
+      amount: parseFloat(membership.price),
+      currency: membership.currency,
+      startedAt: new Date().toISOString(),
+    };
+
+    const subscriptionId = await this.db.v1.User.CreateSubscription(subscriptionData);
+
+    return {
+      subscriptionId,
+      message: 'Successfully subscribed to creator'
+    };
+  }
+
+  public async GetUserSubscriptions(userId: string): Promise<Entities.Subscription[]> {
+    Logger.info('UserService.GetUserSubscriptions', { userId });
+
+    const subscriptions = await this.db.v1.User.GetSubscriptionsBySubscriberId(userId);
+    return subscriptions;
+  }
+
+  public async GetCreatorSubscribers(creatorId: string): Promise<Entities.Subscription[]> {
+    Logger.info('UserService.GetCreatorSubscribers', { creatorId });
+
+    const subscriptions = await this.db.v1.User.GetSubscriptionsByCreatorId(creatorId);
+    return subscriptions;
+  }
+
+  public async CancelSubscription(userId: string, subscriptionId: string, reason?: string): Promise<{ message: string }> {
+    Logger.info('UserService.CancelSubscription', { userId, subscriptionId, reason });
+
+    // Get subscription to verify ownership
+    const subscription = await this.db.v1.User.GetSubscriptionById(subscriptionId);
+    if (!subscription) {
+      throw new BadRequest('Subscription not found');
+    }
+
+    if (subscription.subscriberId !== userId) {
+      throw new BadRequest('You can only cancel your own subscriptions');
+    }
+
+    if (subscription.subscriptionStatus === 'canceled') {
+      throw new BadRequest('Subscription is already canceled');
+    }
+
+    // Update subscription status
+    await this.db.v1.User.UpdateSubscriptionStatus(subscriptionId, 'canceled', reason);
+
+    return {
+      message: 'Subscription canceled successfully'
+    };
+  }
 }
