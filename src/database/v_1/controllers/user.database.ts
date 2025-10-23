@@ -355,7 +355,7 @@ export class UserDatabase {
     const knexdb = this.GetKnex();
     const query = knexdb('posts').where({ id: postId }).update(updateData).returning('*');
     const { res, err } = await this.RunQuery(query);
-    if (err) throw new AppError(400, 'Post update failed');
+    if (err) throw new AppError(400, `Post update failed: ${err.message}`);
     if (!res || res.length !== 1) return null;
     return res[0] as Entities.Post;
   }
