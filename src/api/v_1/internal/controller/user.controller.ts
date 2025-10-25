@@ -281,6 +281,23 @@ export class UserController {
     res.json(body);
   };
 
+
+  public getCreatorMemberships = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.params.creatorId;
+      const memberships = await service.GetMembershipsByCreator(creatorId);
+      body = { data: memberships };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  
+
   public getMembershipById = async (req: Request, res: Response): Promise<void> => {
     let body;
     try {

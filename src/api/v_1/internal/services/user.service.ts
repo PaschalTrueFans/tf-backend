@@ -120,6 +120,7 @@ export class UserService {
       tags: creator.tags,
       categoryId: creator.categoryId,
       isFollowing: creator.isfollowing,
+      isSubscribed: creator.isSubscribed,
       createdAt: creator.createdAt,
       updatedAt: creator.updatedAt,
       followersCount: parseInt(creator.followersCount) || 0,

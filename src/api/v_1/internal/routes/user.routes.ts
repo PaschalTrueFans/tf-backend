@@ -43,6 +43,8 @@ router.get('/memberships/:id', userController.getMembershipById);
 router.put('/memberships/:id', userController.updateMembership);
 router.delete('/memberships/:id', userController.deleteMembership);
 
+
+router.get('/creators/:creatorId/memberships', userController.getCreatorMemberships);
 // Subscription routes
 router.post('/subscribe', userController.subscribeToCreator);
 router.get('/subscriptions', userController.getUserSubscriptions);
