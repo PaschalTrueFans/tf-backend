@@ -616,6 +616,32 @@ export class UserDatabase {
     return res ?? [];
   }
 
+
+  async GetMembershipsOfCreatorForUser(creatorId: string, currentUserId: string): Promise<Entities.Membership[]> {
+    this.logger.info('Db.GetMembershipsOfCreatorForUser', { creatorId, currentUserId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('memberships')
+    .select('memberships.*',
+      knexdb.raw('bool_or(user_subscriptions.id IS NOT NULL) as "isSubscribed"'),
+    )
+    .leftJoin('subscriptions as user_subscriptions', function () {
+      this.on('memberships.id', '=', 'user_subscriptions.membershipId')
+          .andOn('user_subscriptions.subscriberId', '=', knexdb.raw('?', [currentUserId]));
+    })
+    .where({ 'memberships.creatorId': creatorId }).orderBy('createdAt', 'desc')
+    .groupBy('memberships.id')
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetMembershipsByCreator failed', err);
+      throw new AppError(400, 'Failed to fetch memberships');
+    }
+
+    return res ?? [];
+  }
+
+
   async UpdateMembership(membershipId: string, updateData: Partial<Entities.Membership>): Promise<Entities.Membership | null> {
     this.logger.info('Db.UpdateMembership', { membershipId, updateData });
 

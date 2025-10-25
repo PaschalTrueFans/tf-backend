@@ -100,11 +100,13 @@ export class UserService {
     }));
   }
 
-  public async GetCreatorById(creatorId: string, currentUserId?: string): Promise<UserModels.CreatorProfile | null | any> {
+  public async GetCreatorById(creatorId: string, currentUserId: string): Promise<UserModels.CreatorProfile | null | any> {
     Logger.info('UserService.GetCreatorById', { creatorId, currentUserId });
 
     const creator = await this.db.v1.User.GetCreatorByIdWithFollowStatus(creatorId, currentUserId);
     const recentPosts = await this.db.v1.User.GetRecentPostsByCreator(creatorId);
+
+    const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId , currentUserId);
 
     return {
       id: creator.id,
@@ -127,20 +129,7 @@ export class UserService {
       subscribersCount: parseInt(creator.subscribersCount),
       category: creator.category || 'music',
       totalPosts: recentPosts.length,
-      memberships:[
-        {
-          id: '1',
-          name: 'Free',
-          price: 0,
-          currency: 'NGN',
-        },
-        {
-          id: '2',
-          name: 'Subscription',
-          price: 9.99,
-          currency: 'NGN',
-        },
-      ],
+      memberships:memeberships,
       recentPosts: recentPosts.map((post: any) => ({
         id: post.id,
         title: post.title,
