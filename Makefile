@@ -21,6 +21,9 @@ ssh:
 pull:
 	git pull origin main && npm run migrator && npm run build && npx pm2 restart server
 
+push:
+	git add . && git commit -m "Fast PUSH" && git push origin main
+
 ssh-prod:
 	sudo ssh -i ./pem/fileName.pem ubuntu@IP_ADDRESS
 .PHONY: prepare migrate build dev stop implode logs start-prod local-only-cleanup-database

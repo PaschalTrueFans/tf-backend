@@ -192,7 +192,8 @@ export class UserDatabase {
     .select([
       'users.*',
       knexdb.raw('COUNT(followers.id) as followersCount'),
-      knexdb.raw('COUNT(subscriptions.id) as "subscribersCount"'),
+      knexdb.raw('COUNT(DISTINCT subscriptions.id) as "subscribersCount"'),
+      knexdb.raw('bool_or(user_subscriptions.id IS NOT NULL) as "isSubscriber"'),
       knexdb.raw(`
         bool_or(user_follows.id IS NOT NULL) as isFollowing
       `)
@@ -202,6 +203,10 @@ export class UserDatabase {
     .leftJoin('followers as user_follows', function () {
       this.on('users.id', '=', 'user_follows.userId')
           .andOn('user_follows.followerId', '=', knexdb.raw('?', [currentUserId]));
+    })
+    .leftJoin('subscriptions as user_subscriptions', function () {
+      this.on('users.id', '=', 'user_subscriptions.creatorId')
+          .andOn('user_subscriptions.subscriberId', '=', knexdb.raw('?', [currentUserId]));
     })
     .where('users.id', creatorId)
     .whereNotNull('users.pageName')
