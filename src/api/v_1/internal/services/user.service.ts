@@ -124,9 +124,9 @@ export class UserService {
       createdAt: creator.createdAt,
       updatedAt: creator.updatedAt,
       followersCount: parseInt(creator.followersCount) || 0,
-      subscribersCount: parseInt(creator.subscribersCount) || 17,
+      subscribersCount: parseInt(creator.subscribersCount),
       category: creator.category || 'music',
-      totalPosts: parseInt(creator.totalPosts) || 0,
+      totalPosts: recentPosts.length,
       memberships:[
         {
           id: '1',

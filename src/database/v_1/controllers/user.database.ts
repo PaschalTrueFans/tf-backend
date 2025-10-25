@@ -192,7 +192,7 @@ export class UserDatabase {
     .select([
       'users.*',
       knexdb.raw('COUNT(followers.id) as followersCount'),
-      knexdb.raw('COUNT(subscriptions.id) as subscribersCount'),
+      knexdb.raw('COUNT(subscriptions.id) as "subscribersCount"'),
       knexdb.raw(`
         bool_or(user_follows.id IS NOT NULL) as isFollowing
       `)
