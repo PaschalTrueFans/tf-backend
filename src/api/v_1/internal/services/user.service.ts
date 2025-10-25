@@ -767,4 +767,21 @@ export class UserService {
       message: 'Subscription canceled successfully'
     };
   }
+
+  public async UnSubscribeToCreator(userId: string, creatorId: string): Promise<{ message: string }> {
+    Logger.info('UserService.UnSubscribeToCreator', { userId, creatorId });
+
+    // Check if user has an active subscription to this creator
+    const existingSubscription = await this.db.v1.User.CheckExistingSubscription(userId, creatorId);
+    if (!existingSubscription) {
+      throw new BadRequest('No active subscription found for this creator');
+    }
+
+    // Delete the subscription
+    await this.db.v1.User.DeleteSubscription(existingSubscription.id);
+
+    return {
+      message: 'Successfully unsubscribed from creator'
+    };
+  }
 }

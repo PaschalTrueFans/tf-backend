@@ -994,4 +994,21 @@ export class UserDatabase {
 
     return res?.[0] || null;
   }
+
+  async DeleteSubscription(subscriptionId: string): Promise<void> {
+    this.logger.info('Db.DeleteSubscription', { subscriptionId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('id', subscriptionId)
+      .del();
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.DeleteSubscription failed', err);
+      throw new AppError(400, 'Failed to delete subscription');
+    }
+  }
 }

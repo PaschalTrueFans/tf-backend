@@ -534,4 +534,28 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Unsubscribe from creator handler
+  public unSubscribeToCreator = async (req: RequestBody<{ creatorId: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const { creatorId } = req.body;
+
+      if (!creatorId) {
+        throw new BadRequest('Creator ID is required');
+      }
+
+      const response = await service.UnSubscribeToCreator(userId, creatorId);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
 }

@@ -47,6 +47,7 @@ router.delete('/memberships/:id', userController.deleteMembership);
 router.get('/creators/:creatorId/memberships', userController.getCreatorMemberships);
 // Subscription routes
 router.post('/subscribe', userController.subscribeToCreator);
+router.post('/unsubscribe', userController.unSubscribeToCreator);
 router.get('/subscriptions', userController.getUserSubscriptions);
 router.get('/creators/:creatorId/subscribers', userController.getCreatorSubscribers);
 router.post('/subscriptions/:subscriptionId/cancel', userController.cancelSubscription);
