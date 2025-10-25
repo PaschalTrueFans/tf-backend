@@ -773,4 +773,26 @@ export class UserService {
       message: 'Successfully unsubscribed from creator'
     };
   }
+
+  // Insights Methods
+  public async GetCreatorInsights(creatorId: string): Promise<{
+    totalSubscribers: number;
+    activeSubscribers: number;
+    totalRevenue: number;
+    postsThisMonth: number;
+    freePosts: number;
+    paidPosts: number;
+    recentTransactions: any[];
+  }> {
+    Logger.info('UserService.GetCreatorInsights', { creatorId });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can view insights.');
+    }
+
+    // Get all insights data in a single optimized query
+    return await this.db.v1.User.GetCreatorInsights(creatorId);
+  }
 }

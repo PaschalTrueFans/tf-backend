@@ -52,4 +52,7 @@ router.get('/subscriptions', userController.getUserSubscriptions);
 router.get('/creators/:creatorId/subscribers', userController.getCreatorSubscribers);
 router.post('/subscriptions/:subscriptionId/cancel', userController.cancelSubscription);
 
+// Insights routes
+router.get('/insights', userController.getCreatorInsights);
+
 export { router as userRoutes };

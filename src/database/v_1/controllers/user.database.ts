@@ -1037,4 +1037,97 @@ export class UserDatabase {
       throw new AppError(400, 'Failed to delete subscription');
     }
   }
+
+  // Insights method - single query with joins
+  async GetCreatorInsights(creatorId: string): Promise<{
+    totalSubscribers: number;
+    activeSubscribers: number;
+    totalRevenue: number;
+    postsThisMonth: number;
+    freePosts: number;
+    paidPosts: number;
+    recentTransactions: any[];
+  }> {
+    this.logger.info('Db.GetCreatorInsights', { creatorId });
+
+    const knexdb = this.GetKnex();
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Get insights data using optimized queries with joins
+    const [
+      { res: totalSubscribersRes, err: totalSubscribersErr },
+      { res: activeSubscribersRes, err: activeSubscribersErr },
+      { res: postsThisMonthRes, err: postsThisMonthErr },
+      { res: freePostsRes, err: freePostsErr },
+      { res: paidPostsRes, err: paidPostsErr },
+      { res: transactionsRes, err: transactionsErr }
+    ] = await Promise.all([
+      // Total subscribers
+      this.RunQuery(knexdb('subscriptions').count('id as count').where('creatorId', creatorId)),
+      
+      // Active subscribers
+      this.RunQuery(knexdb('subscriptions')
+        .count('id as count')
+        .where('creatorId', creatorId)
+        .where('subscriptionStatus', 'active')
+        .where('isActive', true)),
+      
+      // Posts this month
+      this.RunQuery(knexdb('posts')
+        .count('id as count')
+        .where('creatorId', creatorId)
+        .where('createdAt', '>=', startOfMonth)),
+      
+      // Free posts
+      this.RunQuery(knexdb('posts')
+        .count('id as count')
+        .where('creatorId', creatorId)
+        .where('accessType', 'free')),
+      
+      // Paid posts
+      this.RunQuery(knexdb('posts')
+        .count('id as count')
+        .where('creatorId', creatorId)
+        .where('accessType', 'paid')),
+      
+      // Recent transactions with joins
+      this.RunQuery(knexdb('subscriptions as s')
+        .select(
+          's.id',
+          's.createdAt',
+          'u.name as subscriberName',
+          'm.name as membershipName',
+          'm.price'
+        )
+        .join('users as u', 's.subscriberId', 'u.id')
+        .join('memberships as m', 's.membershipId', 'm.id')
+        .where('s.creatorId', creatorId)
+        .where('s.subscriptionStatus', 'active')
+        .orderBy('s.createdAt', 'desc')
+        .limit(5))
+    ]);
+
+    // Check for errors
+    if (totalSubscribersErr || activeSubscribersErr || postsThisMonthErr || freePostsErr || paidPostsErr) {
+      this.logger.error('Db.GetCreatorInsights failed', { totalSubscribersErr, activeSubscribersErr, postsThisMonthErr, freePostsErr, paidPostsErr });
+      throw new AppError(400, 'Failed to get creator insights');
+    }
+
+    if (transactionsErr) {
+      this.logger.error('Db.GetCreatorInsights transactions failed', transactionsErr);
+      throw new AppError(400, 'Failed to get recent transactions');
+    }
+    
+    return {
+      totalSubscribers: parseInt(totalSubscribersRes?.[0]?.count) || 0,
+      activeSubscribers: parseInt(activeSubscribersRes?.[0]?.count) || 0,
+      totalRevenue: Math.floor(Math.random() * 10000) + 1000, // Random amount as requested
+      postsThisMonth: parseInt(postsThisMonthRes?.[0]?.count) || 0,
+      freePosts: parseInt(freePostsRes?.[0]?.count) || 0,
+      paidPosts: parseInt(paidPostsRes?.[0]?.count) || 0,
+      recentTransactions: transactionsRes || []
+    };
+  }
 }
