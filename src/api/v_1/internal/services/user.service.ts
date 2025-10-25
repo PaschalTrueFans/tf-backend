@@ -718,8 +718,6 @@ export class UserService {
       membershipId: membershipId,
       subscriptionStatus: 'active',
       isActive: true,
-      amount: parseFloat(membership.price),
-      currency: membership.currency,
       startedAt: new Date().toISOString(),
     };
 

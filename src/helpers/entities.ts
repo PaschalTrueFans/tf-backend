@@ -87,8 +87,6 @@ export interface Subscription extends DefaultTable {
   stripeCustomerId?: string;
   subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'incomplete' | 'trialing' | 'paused';
   isActive: boolean;
-  amount: number;
-  currency: string;
   startedAt?: string;
   canceledAt?: string;
   cancelReason?: string;
