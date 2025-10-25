@@ -22,7 +22,7 @@ pull:
 	git pull origin main && npm run migrator && npm run build && npx pm2 restart server && npx pm2 logs
 
 push:
-	git add . && git commit -m "Fast PUSH" && git push origin main
+	git add . && git commit -m "Unsubscribe" && git push origin main
 
 ssh-prod:
 	sudo ssh -i ./pem/fileName.pem ubuntu@IP_ADDRESS
