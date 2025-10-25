@@ -68,6 +68,24 @@ export class UserService {
       updateData.socialLinks = JSON.stringify(socialLinks);
     }
 
+    if(updateData.email) {
+
+      const existingUser = await this.db.v1.User.GetUser({ email: updateData.email });
+      if(existingUser) {
+        throw new BadRequest('User With this email already exist ');
+      }
+
+    }
+
+    if(updateData.pageName) {
+
+      const existingUser = await this.db.v1.User.GetUser({ pageName: updateData.pageName });
+      if(existingUser) {
+        throw new BadRequest('User With this PageName already exist ');
+      }
+
+    }
+
     const updatedUser = await this.db.v1.User.UpdateUser(userId, updateData);
 
     if (!updatedUser) throw new BadRequest('User not found or update failed');
