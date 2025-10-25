@@ -346,6 +346,7 @@ export class UserService {
 // 3. Free Posts By Other Creators 
 
 // 1. Paid Posts membership based
+    const paidPosts = await this.db.v1.User.GetAllPaidPostsByMembershipCreators(userId, page, limit);
 
 // 2. Posts by followed creators
     const followedPosts = await this.db.v1.User.GetAllPostsByFollowedCreator(userId, page, limit);
@@ -354,11 +355,13 @@ export class UserService {
     const publicPosts = await this.db.v1.User.GetPublicPostsByOtherCreators(userId, page, limit);
 
     // Combine posts from both sources
-    const allPosts = [...followedPosts, ...publicPosts];
     
     // Sort by creation date (most recent first)
-    allPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
+    paidPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    followedPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    publicPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const allPosts = [...paidPosts, ...followedPosts, ...publicPosts];
     // Apply pagination to combined results
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;

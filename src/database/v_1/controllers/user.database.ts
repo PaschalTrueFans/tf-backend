@@ -1038,6 +1038,55 @@ export class UserDatabase {
     }
   }
 
+  async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
+    this.logger.info('Db.GetAllPaidPostsByMembershipCreators', { userId, page, limit });
+
+    const knexdb = this.GetKnex();
+    const offset = (page - 1) * limit;
+
+    const query = knexdb('posts')
+      .leftJoin('postComments', 'posts.id', 'postComments.postId')
+      .leftJoin('postsMediaFiles', 'posts.id', 'postsMediaFiles.postId')
+      .innerJoin('subscriptions', 'posts.creatorId', 'subscriptions.creatorId') // Join with subscriptions
+      .innerJoin('users', 'posts.creatorId', 'users.id') // Get creator info
+      .where('subscriptions.subscriberId', userId) // User is subscribed
+      .where('subscriptions.subscriptionStatus', 'active') // Active subscription
+      .where('subscriptions.isActive', true) // Active subscription
+      .where('posts.accessType', 'paid') // Only paid/private posts
+      .groupBy([
+        'posts.id',
+        'posts.title',
+        'posts.content',
+        'posts.createdAt',
+        'posts.tags',
+        'posts.totalLikes',
+        'posts.creatorId',
+        'users.id',
+        'users.profilePhoto',
+        'users.pageName'
+      ])
+      .select([
+        'posts.id as postId',
+        'posts.title as postTitle',
+        'posts.content',
+        'posts.createdAt',
+        'posts.tags',
+        'posts.totalLikes',
+        'posts.creatorId',
+        'users.profilePhoto as creatorImage',
+        'users.pageName as pageName',
+        knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
+        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"')
+      ])
+      .orderBy('posts.createdAt', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    const { res, err } = await this.RunQuery(query);
+    if (err) throw new AppError(400, 'Failed to fetch paid posts from subscribed creators');
+    return res ?? [];
+  }
+
   // Insights method - single query with joins
   async GetCreatorInsights(creatorId: string): Promise<{
     totalSubscribers: number;
