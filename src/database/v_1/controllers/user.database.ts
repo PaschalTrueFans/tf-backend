@@ -255,6 +255,20 @@ export class UserDatabase {
     return res;
   }
 
+  async GetTotalFollowers(creatorId: string): Promise<any> {
+    this.logger.info('Db.GetTotalFollowers', { creatorId });
+  
+    const knexdb = this.GetKnex();
+  
+    const result = await knexdb('followers')
+      .count('* as followersCount')
+      .where('followers.userId', creatorId)
+      .first();
+  
+    return result?.followersCount || 0;
+  }
+  
+
   async ToggleFollowUser(userId: string, followerId: string): Promise<{ action: 'followed' | 'unfollowed'; isFollowing: boolean }> {
     this.logger.info('Db.ToggleFollowUser', { userId, followerId });
 
@@ -850,7 +864,7 @@ export class UserDatabase {
         this.logger.error('Db.CreateSubscription failed due to duplicate key', err);
         throw new AppError(400, 'Subscription already exists for this user-creator pair');
       }
-      throw new AppError(400, 'Subscription not created');
+      throw new AppError(400, `Subscription not created ${err}`);
     }
 
     if (!res || res.length !== 1) {
@@ -859,7 +873,7 @@ export class UserDatabase {
     }
 
     const { id } = res[0];
-    return id;
+    return id;  
   }
 
   async GetSubscriptionById(id: string): Promise<Entities.Subscription | null> {

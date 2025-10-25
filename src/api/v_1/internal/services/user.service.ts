@@ -193,6 +193,7 @@ export class UserService {
 
     const creator = await this.db.v1.User.GetCreatorByPageNameWithFollowStatus(pageName, currentUserId);
     const recentPosts = await this.db.v1.User.GetRecentPostsByCreator(creator.id);
+    const followersCount = await this.db.v1.User.GetTotalFollowers(creator.id);
     if (!creator) {
       throw new BadRequest('Creator not found');
     }
@@ -213,7 +214,7 @@ export class UserService {
       isFollowing: creator.isFollowing,
       createdAt: creator.createdAt,
       updatedAt: creator.updatedAt,
-      followersCount: parseInt(creator.followersCount) || 0,
+      followersCount: followersCount || 0,
       subscribersCount: parseInt(creator.subscribersCount) || 17,
       category: creator.category || 'music',
       totalPosts: parseInt(creator.totalPosts) || 0,
