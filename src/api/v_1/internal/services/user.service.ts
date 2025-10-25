@@ -313,10 +313,11 @@ export class UserService {
 
   public async UpdatePost(postId: string, body: PostModel.UpdatePostBody): Promise<Entities.Post | null> {
     Logger.info('UserService.UpdatePost', { postId, body: { ...body, content: '[omitted]' } });
-    const updated = await this.db.v1.User.UpdatePost(postId, body as Partial<Entities.Post>);
-    if (body.mediaFiles) {
-      const mediaFiles = body.mediaFiles.map((m) => ({ type: m.type, url: m.url, name: m.name, size: m.size }));
-      await this.db.v1.User.ReplacePostMedia(postId, mediaFiles);
+    const {mediaFiles , ...data} = body
+    const updated = await this.db.v1.User.UpdatePost(postId, data as Partial<Entities.Post>);
+    if (mediaFiles) {
+      const mediaFiles2 = mediaFiles.map((m) => ({ type: m.type, url: m.url, name: m.name, size: m.size }));
+      await this.db.v1.User.ReplacePostMedia(postId, mediaFiles2);
     }
     return updated;
   }
