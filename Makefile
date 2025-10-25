@@ -19,7 +19,7 @@ local-only-cleanup-database:
 ssh:
 	sudo ssh -i ./pem/true-fans-dev.pem ubuntu@54.177.131.12
 pull:
-	git pull origin main && npm run migrator && npm run build && npx pm2 restart server
+	git pull origin main && npm run migrator && npm run build && npx pm2 restart server && npx pm2 logs
 
 push:
 	git add . && git commit -m "Fast PUSH" && git push origin main
