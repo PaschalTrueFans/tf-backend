@@ -8,6 +8,8 @@ import { Logger } from '../helpers/logger';
 interface ServerToClientEvents {
   message: (payload: { conversationId: string; message: { id: string; senderId: string; content: string; createdAt: string } }) => void;
   conversationCreated: (payload: { conversation: { id: string; memberId: string; creatorId: string } }) => void;
+  messageSent: (payload: { messageId: string; status: string }) => void;
+  conversationUpdated: (payload: { conversationId: string; lastMessageContent: string; lastMessageAt: string }) => void;
   error: (payload: { message: string }) => void;
 }
 
@@ -45,6 +47,9 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
   io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
     Logger.info('Socket connected', { userId: socket.data.userId, socketId: socket.id });
     const db = new Db();
+    
+    // Join user's personal room for global updates
+    socket.join(`user:${socket.data.userId}`);
 
     socket.on('joinRoom', async ({ conversationId }: { conversationId: string }) => {
       try {
@@ -68,7 +73,34 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
           return;
         }
         const message = await db.v1.Chat.CreateMessage(conversationId, socket.data.userId, content.trim());
+        
+        // Emit the message to the conversation room
         io.to(conversationId).emit('message', { conversationId, message });
+        
+        // Emit conversation update to all participants
+        io.to(conversationId).emit('conversationUpdated', {
+          conversationId,
+          lastMessageContent: message.content,
+          lastMessageAt: message.createdAt
+        });
+        
+        // Also emit to personal rooms for users not in the conversation room
+        const conversation = await db.v1.Chat.GetConversationById(conversationId);
+        if (conversation) {
+          io.to(`user:${conversation.memberId}`).emit('conversationUpdated', {
+            conversationId,
+            lastMessageContent: message.content,
+            lastMessageAt: message.createdAt
+          });
+          io.to(`user:${conversation.creatorId}`).emit('conversationUpdated', {
+            conversationId,
+            lastMessageContent: message.content,
+            lastMessageAt: message.createdAt
+          });
+        }
+        
+        // Emit confirmation to sender
+        socket.emit('messageSent', { messageId: message.id, status: 'sent' });
       } catch (e) {
         socket.emit('error', { message: 'Failed to send message' });
       }
@@ -92,6 +124,29 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
         // Join room and notify both participants
         socket.join(conversation.id);
         io.to(conversation.id).emit('message', { conversationId: conversation.id, message });
+        
+        // Emit conversation update to all participants
+        io.to(conversation.id).emit('conversationUpdated', {
+          conversationId: conversation.id,
+          lastMessageContent: message.content,
+          lastMessageAt: message.createdAt
+        });
+        
+        // Also emit to personal rooms
+        io.to(`user:${creatorId}`).emit('conversationUpdated', {
+          conversationId: conversation.id,
+          lastMessageContent: message.content,
+          lastMessageAt: message.createdAt
+        });
+        io.to(`user:${memberId}`).emit('conversationUpdated', {
+          conversationId: conversation.id,
+          lastMessageContent: message.content,
+          lastMessageAt: message.createdAt
+        });
+        
+        // Emit confirmation to sender
+        socket.emit('messageSent', { messageId: message.id, status: 'sent' });
+        
         // Also notify the creator via a personal room if connected
         io.to(`user:${creatorId}`).emit('conversationCreated', { conversation });
         io.to(`user:${memberId}`).emit('conversationCreated', { conversation });
