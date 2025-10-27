@@ -31,7 +31,6 @@ export async function categoriesSeed(db: Db) {
   try {
     // Check if categories table is empty
     const existingCategories = await db.v1.User.GetCategories();
-    Logger.info('Existing categories', existingCategories);
     
     if (existingCategories.length > 0) {
       Logger.info('Categories already exist, skipping seed');

@@ -7,6 +7,7 @@ import fileUpload from 'express-fileupload';
 import { commonRoutes } from './common.routes';
 import { authRoutes } from './auth.routes';
 import { userRoutes } from './user.routes';
+import { chatRoutes } from './chat.routes';
 
 export class ApiRouter {
   public router: express.Router;
@@ -29,6 +30,7 @@ export class ApiRouter {
     this.router.use('/common', commonRoutes);
     this.router.use('/auth', authRoutes);
     this.router.use('/user', userRoutes);
+    this.router.use('/user/chat', chatRoutes);
 
     this.router.use('*', (req: express.Request, res: express.Response): express.Response => {
       try {

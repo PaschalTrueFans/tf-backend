@@ -120,3 +120,14 @@ export interface Transaction extends DefaultTable {
   description?: string;
   receiptUrl?: string;
 }
+
+export interface Conversation extends DefaultTable {
+  memberId: string;
+  creatorId: string;
+}
+
+export interface Message extends DefaultTable {
+  conversationId: string;
+  senderId: string;
+  content: string;
+}

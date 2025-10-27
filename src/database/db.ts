@@ -5,6 +5,7 @@ import { ENV } from '../helpers/env';
 import { Logger } from '../helpers/logger';
 import { UserDatabase } from './v_1/controllers/user.database';
 import { AuthDatabase } from './v_1/controllers/auth.database';
+import { ChatDatabase } from './v_1/controllers/chat.database';
 
 export class Db {
   // eslint-disable-next-line no-use-before-define
@@ -17,6 +18,7 @@ export class Db {
   public v1: {
     User: UserDatabase;
     Auth: AuthDatabase;
+    Chat: ChatDatabase;
   };
 
   // public v2: {
@@ -36,6 +38,7 @@ export class Db {
     this.v1 = {
       User: new UserDatabase(dbArgs),
       Auth: new AuthDatabase(dbArgs),
+      Chat: new ChatDatabase(dbArgs),
     };
 
     // this.v2 = {
