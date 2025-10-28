@@ -300,7 +300,36 @@ export class UserService {
       throw new BadRequest('Cannot follow yourself');
     }
 
-    return await this.db.v1.User.ToggleFollowUser(userId, followerId);
+    const result = await this.db.v1.User.ToggleFollowUser(userId, followerId);
+
+    // Create notification for creator when someone follows them
+    if (result.action === 'followed') {
+      try {
+        const follower = await this.db.v1.User.GetUser({ id: followerId });
+        
+        const notification: Partial<Entities.Notification> = {
+          userId: userId, // Creator receives the notification
+          title: 'New Follower!',
+          message: `${follower?.name || follower?.creatorName || 'Someone'} started following you`,
+          redirectUrl: `/creator/${creator.pageName}`,
+          fromUserId: followerId,
+          type: 'creator',
+          isRead: false,
+        };
+        
+        await this.CreateNotification(notification);
+        
+        Logger.info('UserService.ToggleFollowCreator - Creator notification created', { 
+          creatorId: userId, 
+          followerId: followerId 
+        });
+      } catch (error) {
+        // Log error but don't fail the follow action
+        Logger.error('UserService.ToggleFollowCreator - Failed to create creator notification', error);
+      }
+    }
+
+    return result;
   }
 
   // Posts CRUD
@@ -326,6 +355,39 @@ export class UserService {
       size: m.size,
     }));
     const id = await this.db.v1.User.CreatePost(post, mediaFiles);
+
+    // Create notifications for all subscribers
+    try {
+      const subscribers = await this.db.v1.User.GetSubscriptionsByCreatorId(creatorId);
+      
+      // Create notifications for each subscriber
+      const notificationPromises = subscribers.map(async (subscriber) => {
+        const notification: Partial<Entities.Notification> = {
+          userId: subscriber.subscriberId,
+          title: `New Post from ${creator.name || creator.creatorName}`,
+          message: `${creator.name || creator.creatorName} just posted "${body.title}"`,
+          redirectUrl: `/post/${id}`,
+          fromUserId: creatorId,
+          type: 'member',
+          isRead: false,
+        };
+        
+        return this.CreateNotification(notification);
+      });
+
+      // Execute all notification creations in parallel
+      await Promise.all(notificationPromises);
+      
+      Logger.info('UserService.CreatePost - Notifications created', { 
+        creatorId, 
+        postId: id, 
+        subscriberCount: subscribers.length 
+      });
+    } catch (error) {
+      // Log error but don't fail the post creation
+      Logger.error('UserService.CreatePost - Failed to create notifications', error);
+    }
+
     return id;
   }
 
@@ -722,6 +784,9 @@ export class UserService {
       throw new BadRequest('You already have an active subscription to this creator');
     }
 
+    // Get subscriber details for notification
+    const subscriber = await this.db.v1.User.GetUser({ id: userId });
+
     // Create subscription
     const subscriptionData: Partial<Entities.Subscription> = {
       subscriberId: userId,
@@ -733,6 +798,30 @@ export class UserService {
     };
 
     const subscriptionId = await this.db.v1.User.CreateSubscription(subscriptionData);
+
+    // Create notification for creator
+    try {
+      const notification: Partial<Entities.Notification> = {
+        userId: membership.creatorId,
+        title: 'New Subscriber!',
+        message: `${subscriber?.name || subscriber?.creatorName || 'Someone'} subscribed to your ${membership.name} membership`,
+        redirectUrl: `/insights`,
+        fromUserId: userId,
+        type: 'creator',
+        isRead: false,
+      };
+      
+      await this.CreateNotification(notification);
+      
+      Logger.info('UserService.SubscribeToCreator - Creator notification created', { 
+        creatorId: membership.creatorId, 
+        subscriberId: userId,
+        subscriptionId 
+      });
+    } catch (error) {
+      // Log error but don't fail the subscription
+      Logger.error('UserService.SubscribeToCreator - Failed to create creator notification', error);
+    }
 
     return {
       subscriptionId,
@@ -846,5 +935,11 @@ export class UserService {
     Logger.info('UserService.GetUnreadNotificationCount', { userId });
 
     return await this.db.v1.User.GetUnreadCount(userId);
+  }
+
+  public async CreateNotification(notification: Partial<Entities.Notification>): Promise<string> {
+    Logger.info('UserService.CreateNotification', { notification });
+
+    return await this.db.v1.User.CreateNotification(notification);
   }
 }

@@ -1331,4 +1331,24 @@ export class UserDatabase {
 
     return parseInt((res?.[0]?.count as unknown as string) || '0', 10);
   }
+
+  async CreateNotification(notification: Partial<Entities.Notification>): Promise<string> {
+    this.logger.info('Db.CreateNotification', { notification });
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('notifications').insert(notification, 'id');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CreateNotification failed', err);
+      throw new AppError(400, 'Failed to create notification');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.error('Db.CreateNotification - No notification created');
+      throw new AppError(400, 'Failed to create notification');
+    }
+
+    return res[0].id;
+  }
 }
