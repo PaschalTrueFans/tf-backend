@@ -1179,4 +1179,156 @@ export class UserDatabase {
       recentTransactions: transactionsRes || []
     };
   }
+
+  // Notification methods
+  async GetAllNotifications(userId: string, page = 1, limit = 20, type?: 'member' | 'creator'): Promise<{
+    notifications: Entities.Notification[];
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+  }> {
+    this.logger.info('Db.GetAllNotifications', { userId, page, limit, type });
+    const knexdb = this.GetKnex();
+    const offset = (page - 1) * limit;
+
+    // Build base query
+    let countQuery = knexdb('notifications').where('userId', userId);
+    let query = knexdb('notifications as n')
+      .leftJoin('users as u', 'n.fromUserId', 'u.id')
+      .where('n.userId', userId);
+
+    // Add type filter if provided
+    if (type) {
+      countQuery = countQuery.where('type', type);
+      query = query.where('n.type', type);
+    }
+
+    // Get total count
+    const countQueryFinal = countQuery.count<{ count: string }[]>({ count: '*' });
+    const { res: countRes, err: countErr } = await this.RunQuery(countQueryFinal);
+    if (countErr) {
+      this.logger.error('Db.GetAllNotifications count failed', countErr);
+      throw new AppError(400, 'Failed to get notifications count');
+    }
+    const totalCount = parseInt((countRes?.[0]?.count as unknown as string) || '0', 10);
+
+    // Get notifications with sender details
+    const queryFinal = query
+      .select(
+        'n.id',
+        'n.userId',
+        'n.title',
+        'n.message',
+        'n.redirectUrl',
+        'n.fromUserId',
+        'n.type',
+        'n.isRead',
+        'n.createdAt',
+        'n.updatedAt',
+        'u.name as fromUserName',
+        'u.creatorName as fromUserCreatorName',
+        'u.profilePhoto as fromUserProfilePhoto'
+      )
+      .orderBy('n.createdAt', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    const { res, err } = await this.RunQuery(queryFinal);
+    if (err) {
+      this.logger.error('Db.GetAllNotifications failed', err);
+      throw new AppError(400, 'Failed to fetch notifications');
+    }
+
+    const notifications = (res || []).map((notification: any) => ({
+      id: notification.id,
+      userId: notification.userId,
+      title: notification.title,
+      message: notification.message,
+      redirectUrl: notification.redirectUrl,
+      fromUserId: notification.fromUserId,
+      fromUserName: notification.fromUserName,
+      fromUserCreatorName: notification.fromUserCreatorName,
+      fromUserProfilePhoto: notification.fromUserProfilePhoto,
+      isRead: notification.isRead,
+      type: notification.type,
+      createdAt: notification.createdAt,
+      updatedAt: notification.updatedAt,
+    })) as Entities.Notification[];
+
+    return {
+      notifications,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+    };
+  }
+
+  async MarkNotificationAsRead(notificationId: string, userId: string): Promise<Entities.Notification> {
+    this.logger.info('Db.MarkNotificationAsRead', { notificationId, userId });
+    const knexdb = this.GetKnex();
+
+    // First verify the notification belongs to the user
+    const verifyQuery = knexdb('notifications').where({ id: notificationId, userId });
+    const { res: verifyRes, err: verifyErr } = await this.RunQuery(verifyQuery);
+    if (verifyErr || !verifyRes || !verifyRes[0]) {
+      this.logger.error('Db.MarkNotificationAsRead verification failed', verifyErr);
+      throw new AppError(404, 'Notification not found');
+    }
+
+    // Update the notification
+    const updateQuery = knexdb('notifications')
+      .where({ id: notificationId, userId })
+      .update({ isRead: true, updatedAt: knexdb.fn.now() }, '*');
+    
+    const { res, err } = await this.RunQuery(updateQuery);
+    if (err) {
+      this.logger.error('Db.MarkNotificationAsRead failed', err);
+      throw new AppError(400, 'Failed to mark notification as read');
+    }
+
+    return (res?.[0] as Entities.Notification) || ({} as Entities.Notification);
+  }
+
+  async MarkAllNotificationsAsRead(userId: string): Promise<{ updatedCount: number }> {
+    this.logger.info('Db.MarkAllNotificationsAsRead', { userId });
+    const knexdb = this.GetKnex();
+
+    const updateQuery = knexdb('notifications')
+      .where({ userId, isRead: false })
+      .update({ isRead: true, updatedAt: knexdb.fn.now() });
+
+    const { res, err } = await this.RunQuery(updateQuery);
+    if (err) {
+      this.logger.error('Db.MarkAllNotificationsAsRead failed', err);
+      throw new AppError(400, 'Failed to mark all notifications as read');
+    }
+
+    // Get count of updated notifications
+    const countQuery = knexdb('notifications').where({ userId, isRead: true }).count<{ count: string }[]>({ count: '*' });
+    const { res: countRes, err: countErr } = await this.RunQuery(countQuery);
+    if (countErr) {
+      this.logger.error('Db.MarkAllNotificationsAsRead count failed', countErr);
+      throw new AppError(400, 'Failed to get updated count');
+    }
+
+    const updatedCount = parseInt((countRes?.[0]?.count as unknown as string) || '0', 10);
+    return { updatedCount };
+  }
+
+  async GetUnreadCount(userId: string): Promise<number> {
+    this.logger.info('Db.GetUnreadCount', { userId });
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('notifications')
+      .where({ userId, isRead: false })
+      .count<{ count: string }[]>({ count: '*' });
+
+    const { res, err } = await this.RunQuery(query);
+    if (err) {
+      this.logger.error('Db.GetUnreadCount failed', err);
+      throw new AppError(400, 'Failed to get unread count');
+    }
+
+    return parseInt((res?.[0]?.count as unknown as string) || '0', 10);
+  }
 }

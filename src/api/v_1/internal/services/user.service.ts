@@ -817,4 +817,34 @@ export class UserService {
     // Get all insights data in a single optimized query
     return await this.db.v1.User.GetCreatorInsights(creatorId);
   }
+
+  // Notification Methods
+  public async GetAllNotifications(userId: string, page = 1, limit = 20, type?: 'member' | 'creator'): Promise<{
+    notifications: Entities.Notification[];
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+  }> {
+    Logger.info('UserService.GetAllNotifications', { userId, page, limit, type });
+
+    return await this.db.v1.User.GetAllNotifications(userId, page, limit, type);
+  }
+
+  public async MarkNotificationAsRead(notificationId: string, userId: string): Promise<Entities.Notification> {
+    Logger.info('UserService.MarkNotificationAsRead', { notificationId, userId });
+
+    return await this.db.v1.User.MarkNotificationAsRead(notificationId, userId);
+  }
+
+  public async MarkAllNotificationsAsRead(userId: string): Promise<{ updatedCount: number }> {
+    Logger.info('UserService.MarkAllNotificationsAsRead', { userId });
+
+    return await this.db.v1.User.MarkAllNotificationsAsRead(userId);
+  }
+
+  public async GetUnreadNotificationCount(userId: string): Promise<number> {
+    Logger.info('UserService.GetUnreadNotificationCount', { userId });
+
+    return await this.db.v1.User.GetUnreadCount(userId);
+  }
 }

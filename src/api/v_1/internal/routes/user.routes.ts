@@ -55,4 +55,10 @@ router.post('/subscriptions/:subscriptionId/cancel', userController.cancelSubscr
 // Insights routes
 router.get('/insights', userController.getCreatorInsights);
 
+// Notification routes
+router.get('/notifications', userController.getAllNotifications);
+router.get('/notifications/unread-count', userController.getUnreadNotificationCount);
+router.put('/notifications/:id/read', userController.markNotificationAsRead);
+router.put('/notifications/mark-all-read', userController.markAllNotificationsAsRead);
+
 export { router as userRoutes };

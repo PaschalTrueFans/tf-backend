@@ -131,3 +131,16 @@ export interface Message extends DefaultTable {
   senderId: string;
   content: string;
 }
+
+export interface Notification extends DefaultTable {
+  userId: string;
+  title: string;
+  message: string;
+  redirectUrl: string;
+  fromUserId: string;
+  fromUserName?: string;
+  fromUserCreatorName?: string;
+  fromUserProfilePhoto?: string;
+  isRead: boolean;
+  type: 'member' | 'creator';
+}

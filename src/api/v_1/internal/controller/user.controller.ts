@@ -577,4 +577,106 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Notification handlers
+  public getAllNotifications = async (req: RequestQuery<{ page?: string; limit?: string; type?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      
+      // Parse pagination parameters with defaults
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '20', 10);
+      const type = req.query.type as 'member' | 'creator' | undefined;
+      
+      // Validate pagination parameters
+      if (page < 1) {
+        res.status(400).json({ error: 'Page must be greater than 0' });
+        return;
+      }
+      if (limit < 1 || limit > 100) {
+        res.status(400).json({ error: 'Limit must be between 1 and 100' });
+        return;
+      }
+      
+      // Validate type parameter
+      if (type && !['member', 'creator'].includes(type)) {
+        res.status(400).json({ error: 'Type must be either "member" or "creator"' });
+        return;
+      }
+      
+      const result = await service.GetAllNotifications(userId, page, limit, type);
+      body = { data: result };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public markNotificationAsRead = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const notificationId = req.params.id;
+      const userId = req.userId;
+
+      if (!notificationId) {
+        throw new BadRequest('Notification ID is required');
+      }
+
+      const notification = await service.MarkNotificationAsRead(notificationId, userId);
+
+      body = {
+        success: true,
+        data: notification,
+        message: 'Notification marked as read successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public markAllNotificationsAsRead = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      const result = await service.MarkAllNotificationsAsRead(userId);
+
+      body = {
+        success: true,
+        data: result,
+        message: 'All notifications marked as read successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getUnreadNotificationCount = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      const unreadCount = await service.GetUnreadNotificationCount(userId);
+
+      body = {
+        success: true,
+        data: { unreadCount },
+        message: 'Unread count retrieved successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
 }
