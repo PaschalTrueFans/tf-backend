@@ -679,4 +679,92 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Group Invites handlers
+  public createGroupInvite = async (req: RequestBody<{ groupName: string; platform: string; link: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const response = await service.CreateGroupInvite(creatorId, req.body);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getGroupInvitesByCreatorId = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const response = await service.GetGroupInvitesByCreatorId(creatorId);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getGroupInviteById = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const groupInviteId = req.params.id;
+      const response = await service.GetGroupInviteById(groupInviteId);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public updateGroupInvite = async (req: RequestBody<Partial<{ groupName: string; platform: string; link: string }>>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const groupInviteId = req.params.id;
+      const creatorId = req.userId;
+      const response = await service.UpdateGroupInvite(groupInviteId, creatorId, req.body);
+
+      body = {
+        data: response,
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public deleteGroupInvite = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const groupInviteId = req.params.id;
+      const creatorId = req.userId;
+      await service.DeleteGroupInvite(groupInviteId, creatorId);
+
+      body = {
+        message: 'Group invite deleted successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
 }

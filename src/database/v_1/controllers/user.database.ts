@@ -1351,4 +1351,112 @@ export class UserDatabase {
 
     return res[0].id;
   }
+
+  // Group Invites methods
+  async CreateGroupInvite(groupInvite: Partial<Entities.GroupInvite>): Promise<string> {
+    this.logger.info('Db.CreateGroupInvite', { groupInvite });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('group_invites').insert(groupInvite, 'id');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      if (err.code === DatabaseErrors.DUPLICATE) {
+        this.logger.error('Db.CreateGroupInvite failed due to duplicate key', err);
+        throw new AppError(400, 'Group invite already exists');
+      }
+      throw new AppError(400, 'Group invite not created');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.CreateGroupInvite Group invite not created', err);
+      throw new AppError(400, 'Group invite not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
+  async GetGroupInvitesByCreatorId(creatorId: string): Promise<Entities.GroupInvite[]> {
+    this.logger.info('Db.GetGroupInvitesByCreatorId', { creatorId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('group_invites')
+      .select('*')
+      .where('creatorId', creatorId)
+      .orderBy('createdAt', 'desc');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetGroupInvitesByCreatorId Error getting group invites', err);
+      throw new AppError(500, 'Error getting group invites');
+    }
+
+    return res || [];
+  }
+
+  async GetGroupInviteById(id: string): Promise<Entities.GroupInvite | undefined> {
+    this.logger.info('Db.GetGroupInviteById', { id });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('group_invites').select('*').where('id', id).first();
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetGroupInviteById Error getting group invite', err);
+      throw new AppError(500, 'Error getting group invite');
+    }
+
+    if (!res || res.length === 0) {
+      this.logger.info('Db.GetGroupInviteById No group invite found');
+      return undefined;
+    }
+
+    return res[0];
+  }
+
+  async UpdateGroupInvite(id: string, updateData: Partial<Entities.GroupInvite>): Promise<Entities.GroupInvite | undefined> {
+    this.logger.info('Db.UpdateGroupInvite', { id, updateData });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('group_invites')
+      .where('id', id)
+      .update(updateData, '*');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateGroupInvite Error updating group invite', err);
+      throw new AppError(500, 'Error updating group invite');
+    }
+
+    if (!res || res.length === 0) {
+      this.logger.info('Db.UpdateGroupInvite No group invite found to update');
+      return undefined;
+    }
+
+    return res[0];
+  }
+
+  async DeleteGroupInvite(id: string): Promise<void> {
+    this.logger.info('Db.DeleteGroupInvite', { id });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('group_invites').where('id', id).del();
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.DeleteGroupInvite Error deleting group invite', err);
+      throw new AppError(500, 'Error deleting group invite');
+    }
+  }
 }

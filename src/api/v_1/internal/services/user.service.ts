@@ -942,4 +942,84 @@ export class UserService {
 
     return await this.db.v1.User.CreateNotification(notification);
   }
+
+  // Group Invites methods
+  public async CreateGroupInvite(creatorId: string, groupInviteData: { groupName: string; platform: string; link: string }): Promise<Entities.GroupInvite> {
+    Logger.info('UserService.CreateGroupInvite', { creatorId, groupInviteData });
+
+    const groupInvite: Partial<Entities.GroupInvite> = {
+      creatorId,
+      groupName: groupInviteData.groupName,
+      platform: groupInviteData.platform,
+      link: groupInviteData.link,
+    };
+
+    const groupInviteId = await this.db.v1.User.CreateGroupInvite(groupInvite);
+
+    const createdGroupInvite = await this.db.v1.User.GetGroupInviteById(groupInviteId);
+
+    if (!createdGroupInvite) {
+      throw new BadRequest('Failed to create group invite');
+    }
+
+    return createdGroupInvite;
+  }
+
+  public async GetGroupInvitesByCreatorId(creatorId: string): Promise<Entities.GroupInvite[]> {
+    Logger.info('UserService.GetGroupInvitesByCreatorId', { creatorId });
+
+    return await this.db.v1.User.GetGroupInvitesByCreatorId(creatorId);
+  }
+
+  public async GetGroupInviteById(id: string): Promise<Entities.GroupInvite> {
+    Logger.info('UserService.GetGroupInviteById', { id });
+
+    const groupInvite = await this.db.v1.User.GetGroupInviteById(id);
+
+    if (!groupInvite) {
+      throw new BadRequest('Group invite not found');
+    }
+
+    return groupInvite;
+  }
+
+  public async UpdateGroupInvite(id: string, creatorId: string, updateData: Partial<Entities.GroupInvite>): Promise<Entities.GroupInvite> {
+    Logger.info('UserService.UpdateGroupInvite', { id, creatorId, updateData });
+
+    // First verify the group invite belongs to the creator
+    const existingGroupInvite = await this.db.v1.User.GetGroupInviteById(id);
+    
+    if (!existingGroupInvite) {
+      throw new BadRequest('Group invite not found');
+    }
+
+    if (existingGroupInvite.creatorId !== creatorId) {
+      throw new BadRequest('You can only update your own group invites');
+    }
+
+    const updatedGroupInvite = await this.db.v1.User.UpdateGroupInvite(id, updateData);
+
+    if (!updatedGroupInvite) {
+      throw new BadRequest('Failed to update group invite');
+    }
+
+    return updatedGroupInvite;
+  }
+
+  public async DeleteGroupInvite(id: string, creatorId: string): Promise<void> {
+    Logger.info('UserService.DeleteGroupInvite', { id, creatorId });
+
+    // First verify the group invite belongs to the creator
+    const existingGroupInvite = await this.db.v1.User.GetGroupInviteById(id);
+    
+    if (!existingGroupInvite) {
+      throw new BadRequest('Group invite not found');
+    }
+
+    if (existingGroupInvite.creatorId !== creatorId) {
+      throw new BadRequest('You can only delete your own group invites');
+    }
+
+    await this.db.v1.User.DeleteGroupInvite(id);
+  }
 }

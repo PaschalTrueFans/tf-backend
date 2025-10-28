@@ -61,4 +61,11 @@ router.get('/notifications/unread-count', userController.getUnreadNotificationCo
 router.put('/notifications/:id/read', userController.markNotificationAsRead);
 router.put('/notifications/mark-all-read', userController.markAllNotificationsAsRead);
 
+// Group Invites CRUD routes
+router.post('/group-invites', userController.createGroupInvite);
+router.get('/group-invites', userController.getGroupInvitesByCreatorId);
+router.get('/group-invites/:id', userController.getGroupInviteById);
+router.put('/group-invites/:id', userController.updateGroupInvite);
+router.delete('/group-invites/:id', userController.deleteGroupInvite);
+
 export { router as userRoutes };

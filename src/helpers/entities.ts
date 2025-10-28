@@ -144,3 +144,10 @@ export interface Notification extends DefaultTable {
   isRead: boolean;
   type: 'member' | 'creator';
 }
+
+export interface GroupInvite extends DefaultTable {
+  creatorId: string;
+  groupName: string;
+  platform: string;
+  link: string;
+}
