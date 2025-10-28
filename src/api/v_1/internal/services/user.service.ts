@@ -944,7 +944,7 @@ export class UserService {
   }
 
   // Group Invites methods
-  public async CreateGroupInvite(creatorId: string, groupInviteData: { groupName: string; platform: string; link: string }): Promise<Entities.GroupInvite> {
+  public async CreateGroupInvite(creatorId: string, groupInviteData: { groupName: string; platform: string; link: string }): Promise<any> {
     Logger.info('UserService.CreateGroupInvite', { creatorId, groupInviteData });
 
     const groupInvite: Partial<Entities.GroupInvite> = {
@@ -956,13 +956,8 @@ export class UserService {
 
     const groupInviteId = await this.db.v1.User.CreateGroupInvite(groupInvite);
 
-    const createdGroupInvite = await this.db.v1.User.GetGroupInviteById(groupInviteId);
-
-    if (!createdGroupInvite) {
-      throw new BadRequest('Failed to create group invite');
-    }
-
-    return createdGroupInvite;
+    
+    return groupInviteId;
   }
 
   public async GetGroupInvitesByCreatorId(creatorId: string): Promise<Entities.GroupInvite[]> {
