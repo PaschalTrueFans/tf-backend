@@ -27,8 +27,14 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
     cors: {
       origin: corsOrigin,
       credentials: true,
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['*'],
     },
     path: '/socket.io',
+    transports: ['polling', 'websocket'],
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    maxHttpBufferSize: 1e8,
   });
 
   io.use((socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>, next: (err?: Error) => void) => {
@@ -45,7 +51,12 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
   });
 
   io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
-    Logger.info('Socket connected', { userId: socket.data.userId, socketId: socket.id });
+    Logger.info('Socket connected', { 
+      userId: socket.data.userId, 
+      socketId: socket.id,
+      transport: socket.conn.transport.name,
+      userAgent: socket.handshake.headers['user-agent']
+    });
     const db = new Db();
     
     // Join user's personal room for global updates
