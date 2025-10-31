@@ -3,7 +3,7 @@ import { AppError } from '../../../../helpers/errors';
 import { Logger } from '../../../../helpers/logger';
 import { Entities, Hash } from '../../../../helpers';
 import * as Token from '../../../../helpers/token';
-import { generateOTP, generateRandomToken } from '../../../../helpers/otp';
+import { generateRandomOTP } from '../../../../helpers/generateRandomOTP';
 import { EmailService } from '../../../../helpers/email';
 import * as AuthModel from '../models/auth.model';
 import { hashPassword } from '../../../../helpers/hash';
@@ -76,22 +76,34 @@ export class AuthService {
 
     if (!fetchedUser) throw new AppError(400, 'User does not exist');
 
-    const sessionToken = generateRandomToken();
-    await this.db.v1.Auth.StoreSessionToken({ userId: fetchedUser.id, sessionToken: sessionToken });
+    // Generate 6-digit OTP
+    const otp = generateRandomOTP(6);
+    
+    // Store OTP in verifySession table (old sessions for this user will be deleted automatically)
+    await this.db.v1.Auth.StoreSessionToken({ userId: fetchedUser.id, otp: otp });
 
-    await this.emailService.SendMail(email, sessionToken);
+    // Send OTP via email
+    await this.emailService.SendMail(email, otp);
   }
 
-  async VerifyAndUpdate(sessionToken: string, password: string): Promise<void> {
-    Logger.info('AuthService.SendOtp', { sessionToken });
+  async VerifyAndUpdate(email: string, otp: string, password: string): Promise<void> {
+    Logger.info('AuthService.VerifyAndUpdate', { email, otp });
 
-    const fetchedSession = await this.db.v1.Auth.GetSession({ sessionToken });
+    // Get user by email
+    const fetchedUser = await this.db.v1.User.GetUserByEmail(email);
 
-    if (!fetchedSession) throw new AppError(400, 'No Session Exist');
+    if (!fetchedUser) throw new AppError(400, 'User does not exist');
 
-    await this.db.v1.Auth.DeleteSession({ sessionToken });
+    // Get session with OTP for this user (GetSession filters by userId and otp, and checks expiration)
+    const fetchedSession = await this.db.v1.Auth.GetSession({ userId: fetchedUser.id, otp: otp });
 
-    let hashedPassword = await hashPassword(password);
+    if (!fetchedSession) throw new AppError(400, 'Invalid or expired OTP');
+
+    // Delete the session after successful verification
+    await this.db.v1.Auth.DeleteSession({ id: fetchedSession.id });
+
+    // Hash and update password
+    const hashedPassword = await hashPassword(password);
 
     await this.db.v1.User.UpdateUser(fetchedSession.userId, { password: hashedPassword });
   }

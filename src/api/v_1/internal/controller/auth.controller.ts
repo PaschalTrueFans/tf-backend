@@ -60,9 +60,14 @@ export class AuthController {
       const db = res.locals.db as Db;
 
       const service = new AuthService({ db });
-      const response = await service.SendOtp(req.body.email);
+      await service.SendOtp(req.body.email);
+
+      body = {
+        message: 'OTP sent successfully to your email',
+      };
     } catch (error) {
       genericError(error, res);
+      return;
     }
     res.json(body);
   };
@@ -75,9 +80,14 @@ export class AuthController {
       const db = res.locals.db as Db;
 
       const service = new AuthService({ db });
-      await service.VerifyAndUpdate(req.body.sessionToken, req.body.password);
+      await service.VerifyAndUpdate(req.body.email, req.body.otp, req.body.password);
+
+      body = {
+        message: 'Password reset successfully',
+      };
     } catch (error) {
       genericError(error, res);
+      return;
     }
     res.json(body);
   };

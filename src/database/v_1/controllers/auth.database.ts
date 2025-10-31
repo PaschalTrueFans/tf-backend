@@ -70,9 +70,9 @@ export class AuthDatabase {
 
     const knexdb = this.GetKnex();
 
-    const OneMinuteAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const TenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
-    const query = knexdb('verifySession').select('*').where(where).where('createdAt', '>', OneMinuteAgo);
+    const query = knexdb('verifySession').select('*').where(where).where('createdAt', '>', TenMinutesAgo);
 
     const { res, err } = await this.RunQuery(query);
 
@@ -95,12 +95,15 @@ export class AuthDatabase {
 
     const knexdb = this.GetKnex();
 
+    // Delete any existing OTP sessions for this user
+    await this.DeleteSession({ userId: data.userId });
+
     const query = knexdb('verifySession').insert(data, ['id']);
 
     const { err } = await this.RunQuery(query);
 
     if (err) {
-      throw new AppError(400, `Activities not created `);
+      throw new AppError(400, `Session not created  ${err}`);
     }
   }
 }

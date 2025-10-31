@@ -29,7 +29,7 @@ export interface User extends DefaultTable {
 export interface verifyOtp {
   id: string;
   userId: string;
-  sessionToken: string;
+  otp: string;
   createdAt: string;
   updatedAt: string;
 }

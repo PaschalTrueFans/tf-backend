@@ -17,7 +17,8 @@ export const RequestOTPBodySchema = z.object({
 export type RequestOTPBody = z.infer<typeof RequestOTPBodySchema>;
 
 export const RecoverPasswordSchema = z.object({
-  sessionToken: z.string(),
+  email: z.string().email(),
+  otp: z.string().length(6, 'OTP must be 6 digits'),
   password: zodPasswordValidation,
 });
 
