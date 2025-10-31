@@ -142,8 +142,8 @@ export class UserService {
         socialLinks: creator.socialLinks,
         isFollowing: creator.isfollowing,
         followersCount: parseInt(creator.followersCount) || 0,
-        tags: creator.tags || ['music', 'videos', 'entertainment'],
-        category: creator.category || 'music',
+        tags: creator.tags ,
+        category: creator.category ,
         subscribersCount: parseInt(creator.subscribersCount) || 0,
       })),
       pagination: {

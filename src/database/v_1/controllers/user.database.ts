@@ -152,11 +152,13 @@ export class UserDatabase {
       .select([
         'users.*',
         knexdb.raw('COUNT(followers.id) as followersCount'),
+        knexdb.raw('categories.name as category'),
         knexdb.raw(`
           bool_or(user_follows.id IS NOT NULL) as isFollowing
         `)
       ])
       .leftJoin('followers', 'users.id', 'followers.userId')
+      .leftJoin('categories', 'users.categoryId', 'categories.id')
       .leftJoin('followers as user_follows', function () {
         this.on('users.id', '=', 'user_follows.userId')
             .andOn('user_follows.followerId', '=', knexdb.raw('?', [currentUserId]));

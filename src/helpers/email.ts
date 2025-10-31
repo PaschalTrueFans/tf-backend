@@ -1,43 +1,59 @@
 import { SMTP } from './env';
-import axios from 'axios';
 import * as fs from 'fs';
 import { Logger } from './logger';
+import nodemailer from 'nodemailer';
 
 export class EmailService {
-  private BREVO_KEY: string;
-  private BREVO_URL: string;
+  private transporter: nodemailer.Transporter;
 
   constructor() {
     Logger.info('EmailService initialized...');
-    this.BREVO_KEY = SMTP.BREVO_KEY;
-    this.BREVO_URL = SMTP.BREVO_URL;
+    
+    // Create SMTP transporter with cPanel email credentials
+    this.transporter = nodemailer.createTransport({
+      host: SMTP.HOST,
+      port: SMTP.PORT,
+      secure: SMTP.SECURE, // true for 465, false for other ports
+      auth: {
+        user: SMTP.USER,
+        pass: SMTP.PASSWORD,
+      },
+    });
+
+    // Verify connection configuration
+    this.transporter.verify((error, success) => {
+      if (error) {
+        Logger.error('SMTP connection error:', error);
+      } else {
+        Logger.info('SMTP server is ready to take our messages');
+      }
+    });
   }
 
-  async SendMail(email: string, otp: string) {
-    const htmlTemplate = fs.readFileSync('src/v_1/emailTemplates/otpVerification.html', 'utf-8');
+  async SendMail(email: string, otp: string): Promise<void> {
+    try {
+      // Read the email template
+      const htmlTemplate = fs.readFileSync('src/emailTemplates/otpVerification.html', 'utf-8');
 
-    const modifiedHtml = htmlTemplate
-      .replace('{{DATE}}', new Date().toLocaleDateString()) // Replace {{Date}} with current date
-      .replace('{{otp}}', otp);
+      // Replace placeholders in template
+      const modifiedHtml = htmlTemplate
+        .replace('{{DATE}}', new Date().toLocaleDateString())
+        .replace('{{otp}}', otp);
 
-    Logger.info('Send Mail', email, this.BREVO_KEY);
+      Logger.info('Sending mail to:', email);
 
-    axios.post(
-      this.BREVO_URL + '/smtp/email',
-      {
-        to: [{ email: email }],
-        subject: `OTP Verification`,
-        sender: {
-          name: 'TRU-FANS',
-          email: 'no-reply@tru-fans.com',
-        },
-        htmlContent: modifiedHtml,
-      },
-      {
-        headers: {
-          'api-key': this.BREVO_KEY,
-        },
-      },
-    );
+      // Send email using nodemailer
+      const info = await this.transporter.sendMail({
+        from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
+        to: email,
+        subject: 'OTP Verification',
+        html: modifiedHtml,
+      });
+
+      Logger.info('Email sent successfully:', info.messageId);
+    } catch (error) {
+      Logger.error('Error sending email:', error);
+      throw error;
+    }
   }
 }
