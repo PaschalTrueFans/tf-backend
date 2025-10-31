@@ -53,13 +53,28 @@ export class UserController {
   };
 
   // Get all creators handler
-  public getAllCreators = async (req: Request, res: Response): Promise<void> => {
+  public getAllCreators = async (req: RequestQuery<{ page?: string; limit?: string }>, res: Response): Promise<void> => {
     let body;
     try {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const currentUserId = req.userId; // From JWT auth middleware
-      const response = await service.GetAllCreators(currentUserId);
+      
+      // Parse pagination parameters with defaults
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '10', 10);
+      
+      // Validate pagination parameters
+      if (page < 1) {
+        res.status(400).json({ error: 'Page must be greater than 0' });
+        return;
+      }
+      if (limit < 1 || limit > 100) {
+        res.status(400).json({ error: 'Limit must be between 1 and 100' });
+        return;
+      }
+      
+      const response = await service.GetAllCreators(currentUserId, page, limit);
 
       body = {
         data: response,

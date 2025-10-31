@@ -142,10 +142,11 @@ export class UserDatabase {
     return res;
   }
 
-  async GetAllCreatorsWithFollowStatus(currentUserId?: string): Promise<any[]> {
-    this.logger.info('Db.GetAllCreatorsWithFollowStatus', { currentUserId });
+  async GetAllCreatorsWithFollowStatus(currentUserId?: string, page: number = 1, limit: number = 10): Promise<any[]> {
+    this.logger.info('Db.GetAllCreatorsWithFollowStatus', { currentUserId, page, limit });
 
     const knexdb = this.GetKnex();
+    const offset = (page - 1) * limit;
 
     const query = knexdb('users')
       .select([
@@ -162,9 +163,10 @@ export class UserDatabase {
       })
       .whereNotNull('users.pageName')
       // .andWhereNot('users.id', knexdb.raw('?', [currentUserId]))
-      .groupBy('users.id');
-
-
+      .groupBy('users.id')
+      .orderBy('users.createdAt', 'desc')
+      .limit(limit)
+      .offset(offset);
 
     const { res, err } = await this.RunQuery(query);
 
@@ -178,9 +180,26 @@ export class UserDatabase {
       return [];
     }
 
-    
-
     return res;
+  }
+
+  async GetTotalCreatorsCount(): Promise<number> {
+    this.logger.info('Db.GetTotalCreatorsCount');
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('users')
+      .whereNotNull('pageName')
+      .count('id as total');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetTotalCreatorsCount failed', err);
+      throw new AppError(400, 'Failed to fetch creators count');
+    }
+
+    return parseInt(res?.[0]?.total || '0', 10);
   }
 
   async GetCreatorByIdWithFollowStatus(creatorId: string, currentUserId?: string): Promise<any> {
@@ -442,6 +461,10 @@ export class UserDatabase {
     const query = knexdb('posts')
       .leftJoin('postComments', 'posts.id', 'postComments.postId')
       .leftJoin('postsMediaFiles', 'posts.id', 'postsMediaFiles.postId')
+      .leftJoin('postLikes', function() {
+        this.on('posts.id', '=', 'postLikes.postId')
+            .andOn('postLikes.userId', '=', knexdb.raw('?', [userId]));
+      })
       .innerJoin('followers', 'posts.creatorId', 'followers.userId') // userId = creator
       .innerJoin('users', 'posts.creatorId', 'users.id') // Get creator info
       .where('followers.followerId', userId) // followerId = viewer
@@ -467,7 +490,8 @@ export class UserDatabase {
         'users.profilePhoto as creatorImage',
         'users.pageName as pageName',
         knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
-        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"')
+        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"'),
+        knexdb.raw('BOOL_OR("postLikes".id IS NOT NULL) as "isLiked"')
       ])
       .orderBy('posts.createdAt', 'desc')
       .limit(limit)
@@ -518,6 +542,10 @@ export class UserDatabase {
     const query = knexdb('posts')
       .leftJoin('postComments', 'posts.id', 'postComments.postId')
       .leftJoin('postsMediaFiles', 'posts.id', 'postsMediaFiles.postId')
+      .leftJoin('postLikes', function() {
+        this.on('posts.id', '=', 'postLikes.postId')
+            .andOn('postLikes.userId', '=', knexdb.raw('?', [userId]));
+      })
       .innerJoin('users', 'posts.creatorId', 'users.id') // Get creator info
       .leftJoin('followers', function() {
         this.on('posts.creatorId', '=', 'followers.userId')
@@ -549,7 +577,8 @@ export class UserDatabase {
         'users.profilePhoto as creatorImage',
         'users.pageName as pageName',
         knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
-        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"')
+        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"'),
+        knexdb.raw('BOOL_OR("postLikes".id IS NOT NULL) as "isLiked"')
       ])
       .orderBy('posts.createdAt', 'desc')
       .limit(limit)
@@ -1047,6 +1076,10 @@ export class UserDatabase {
     const query = knexdb('posts')
       .leftJoin('postComments', 'posts.id', 'postComments.postId')
       .leftJoin('postsMediaFiles', 'posts.id', 'postsMediaFiles.postId')
+      .leftJoin('postLikes', function() {
+        this.on('posts.id', '=', 'postLikes.postId')
+            .andOn('postLikes.userId', '=', knexdb.raw('?', [userId]));
+      })
       .innerJoin('subscriptions', 'posts.creatorId', 'subscriptions.creatorId') // Join with subscriptions
       .innerJoin('users', 'posts.creatorId', 'users.id') // Get creator info
       .where('subscriptions.subscriberId', userId) // User is subscribed
@@ -1076,7 +1109,8 @@ export class UserDatabase {
         'users.profilePhoto as creatorImage',
         'users.pageName as pageName',
         knexdb.raw('COUNT(DISTINCT "postComments".id) as "totalComments"'),
-        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"')
+        knexdb.raw('ARRAY_AGG(DISTINCT "postsMediaFiles".url) FILTER (WHERE "postsMediaFiles".url IS NOT NULL) as "attachedMedia"'),
+        knexdb.raw('BOOL_OR("postLikes".id IS NOT NULL) as "isLiked"')
       ])
       .orderBy('posts.createdAt', 'desc')
       .limit(limit)

@@ -92,30 +92,69 @@ export class UserService {
 
   }
 
-  public async GetAllCreators(currentUserId?: string): Promise<UserModels.CreatorProfile[] |any > {
-    Logger.info('UserService.GetAllCreators', { currentUserId });
+  public async GetAllCreators(currentUserId?: string, page: number = 1, limit: number = 10): Promise<{
+    creators: UserModels.CreatorProfile[];
+    pagination: {
+      currentPage: number;
+      limit: number;
+      totalCreators: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    };
+  }> {
+    Logger.info('UserService.GetAllCreators', { currentUserId, page, limit });
 
-    const creators = await this.db.v1.User.GetAllCreatorsWithFollowStatus(currentUserId);
+    const [creators, totalCreators] = await Promise.all([
+      this.db.v1.User.GetAllCreatorsWithFollowStatus(currentUserId, page, limit),
+      this.db.v1.User.GetTotalCreatorsCount(),
+    ]);
 
-    if (!creators) return [];
+    if (!creators) {
+      return {
+        creators: [],
+        pagination: {
+          currentPage: page,
+          limit,
+          totalCreators: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      };
+    }
 
-    return creators.map((creator: any) => ({
-      id: creator.id,
-      pageName: creator.pageName!,
-      creatorName: creator.creatorName!,
-      is18Plus: creator.is18Plus || false,
-      profilePhoto: creator.profilePhoto,
-      bio: creator.bio,
-      coverPhoto: creator.coverPhoto,
-      introVideo: creator.introVideo,
-      themeColor: creator.themeColor,
-      socialLinks: creator.socialLinks,
-      isFollowing: creator.isfollowing,
-      followersCount: parseInt(creator.followersCount) || 0,
-      tags: creator.tags || ['music', 'videos', 'entertainment'],
-      category: creator.category || 'music',
-      subscribersCount: parseInt(creator.subscribersCount) || 17,
-    }));
+    const totalPages = Math.ceil(totalCreators / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    return {
+      creators: creators.map((creator: any) => ({
+        id: creator.id,
+        pageName: creator.pageName!,
+        creatorName: creator.creatorName!,
+        is18Plus: creator.is18Plus || false,
+        profilePhoto: creator.profilePhoto,
+        bio: creator.bio,
+        coverPhoto: creator.coverPhoto,
+        introVideo: creator.introVideo,
+        themeColor: creator.themeColor,
+        socialLinks: creator.socialLinks,
+        isFollowing: creator.isfollowing,
+        followersCount: parseInt(creator.followersCount) || 0,
+        tags: creator.tags || ['music', 'videos', 'entertainment'],
+        category: creator.category || 'music',
+        subscribersCount: parseInt(creator.subscribersCount) || 0,
+      })),
+      pagination: {
+        currentPage: page,
+        limit,
+        totalCreators,
+        totalPages,
+        hasNextPage,
+        hasPrevPage,
+      },
+    };
   }
 
   public async GetCreatorById(creatorId: string, currentUserId: string): Promise<UserModels.CreatorProfile | null | any> {
@@ -465,6 +504,7 @@ export class UserService {
       pageName: r.pageName,
       totalLikes: parseInt(r.totalLikes) || 0,
       totalComments: parseInt(r.totalComments) || 0,
+      isLiked: r.isLiked || false,
     }));
 
     return {
