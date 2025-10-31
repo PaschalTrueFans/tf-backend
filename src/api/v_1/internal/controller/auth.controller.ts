@@ -6,8 +6,6 @@ import { genericError, RequestBody, RequestQuery } from '../../../../helpers/uti
 import { AppError } from '../../../../helpers/errors';
 import * as AuthModel from '../models/auth.model';
 import { AuthService } from '../services/auth.service';
-import { getGoogleAuthUrl } from '../../../../helpers/googleAuth';
-import { FrontEndLink } from '../../../../helpers/contants';
 
 export class AuthController {
   constructor() {

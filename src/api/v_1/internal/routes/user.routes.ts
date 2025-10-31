@@ -68,4 +68,8 @@ router.get('/group-invites/:id', userController.getGroupInviteById);
 router.put('/group-invites/:id', userController.updateGroupInvite);
 router.delete('/group-invites/:id', userController.deleteGroupInvite);
 
+// Email Verification routes
+router.post('/send-verification-email', userController.sendVerificationEmail);
+router.post('/verify-email', userController.verifyUser);
+
 export { router as userRoutes };

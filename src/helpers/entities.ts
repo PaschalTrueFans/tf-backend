@@ -23,6 +23,7 @@ export interface User extends DefaultTable {
   socialLinks?: any; // JSON field
   tags?: string[];
   categoryId?: string;
+  isVerified?: boolean;
 }
 
 
@@ -30,6 +31,14 @@ export interface verifyOtp {
   id: string;
   userId: string;
   otp: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VerifiedUser {
+  id: string;
+  userId: string;
+  token: string;
   createdAt: string;
   updatedAt: string;
 }

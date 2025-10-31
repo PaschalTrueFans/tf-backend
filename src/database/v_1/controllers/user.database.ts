@@ -1495,4 +1495,67 @@ export class UserDatabase {
       throw new AppError(500, 'Error deleting group invite');
     }
   }
+
+  // Verification methods
+  async StoreVerificationToken(data: Partial<Entities.VerifiedUser>): Promise<void> {
+    this.logger.info('Db.StoreVerificationToken', { data });
+
+    const knexdb = this.GetKnex();
+
+    // Delete existing verification token for this user if any
+    await knexdb('verifiedUsers').where('userId', data.userId).del();
+
+    const query = knexdb('verifiedUsers').insert(data, ['id']);
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.StoreVerificationToken Error storing verification token', err);
+      throw new AppError(400, `Verification token not created ${err}`);
+    }
+  }
+
+  async GetVerificationByToken(token: string): Promise<Entities.VerifiedUser | undefined> {
+    this.logger.info('Db.GetVerificationByToken', { token });
+
+    const knexdb = this.GetKnex();
+
+    // Token expires after 24 hours
+    const OneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const query = knexdb('verifiedUsers')
+      .select('*')
+      .where('token', token)
+      .where('createdAt', '>', OneDayAgo)
+      .first();
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetVerificationByToken Error getting verification', err);
+      return undefined;
+    }
+
+    if (!res || res.length === 0) {
+      this.logger.info('Db.GetVerificationByToken No valid verification found');
+      return undefined;
+    }
+
+    return res[0] as Entities.VerifiedUser;
+  }
+
+  async DeleteVerificationToken(token: string): Promise<void> {
+    this.logger.info('Db.DeleteVerificationToken', { token });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('verifiedUsers').where('token', token).del();
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.DeleteVerificationToken Error deleting verification token', err);
+      throw new AppError(500, 'Error deleting verification token');
+    }
+  }
 }

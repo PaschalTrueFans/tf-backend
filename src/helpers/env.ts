@@ -17,6 +17,10 @@ export const Server = {
   IS_LOCAL_ENV: (Process.env.ENV as Environments) === Environments.LOCAL,
 };
 
+export const FrontEndLink = {
+  FRONT_END_LINK: Process.env.FRONT_END_LINK as string,
+};
+
 export const Jwt = {
   JWT_SECRET: Process.env.jwtSecret as string,
 };
@@ -65,4 +69,5 @@ export const ENV = {
   Database,
   Swagger,
   AWS,
+  FrontEndLink,
 };

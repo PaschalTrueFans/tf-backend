@@ -782,4 +782,50 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Send verification email handler
+  public sendVerificationEmail = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      await service.SendVerificationEmail(userId);
+
+      body = {
+        message: 'Verification email sent successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  // Verify user handler
+  public verifyUser = async (req: RequestBody<{ token: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const token = req.body.token;
+      
+      if (!token) {
+        throw new BadRequest('Verification token is required');
+      }
+
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      await service.VerifyUser(token, userId);
+
+      body = {
+        message: 'Email verified successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
 }

@@ -10,8 +10,10 @@ import * as Token from '../../../../helpers/token';
 import { generatePassword } from '../../../../helpers/generateRandomPassword';
 import { hashPassword } from '../../../../helpers/hash';
 import { generateRandomOTP } from '../../../../helpers/generateRandomOTP';
+import { generateRandomToken } from '../../../../helpers/otp';
 import moment from 'moment';
 import { EmailService } from '../../../../helpers/email';
+import { FrontEndLink } from '../../../../helpers/env';
 
 export class UserService {
   private db: Db;
@@ -1056,5 +1058,54 @@ export class UserService {
     }
 
     await this.db.v1.User.DeleteGroupInvite(id);
+  }
+
+  // Verification methods
+  async SendVerificationEmail(userId: string): Promise<void> {
+    Logger.info('UserService.SendVerificationEmail', { userId });
+
+    const user = await this.db.v1.User.GetUser({ id: userId });
+
+    if (!user) {
+      throw new AppError(400, 'User not found');
+    }
+
+    if (user.isVerified) {
+      throw new AppError(400, 'User is already verified');
+    }
+
+    // Generate verification token
+    const token = generateRandomToken();
+
+    // Store verification token
+    await this.db.v1.User.StoreVerificationToken({ userId: user.id, token });
+
+    // Create verification link
+    const verificationLink = `${FrontEndLink.FRONT_END_LINK}/verify?token=${token}`;
+
+    // Send verification email
+    await this.emailService.SendVerificationEmail(user.email, verificationLink);
+  }
+
+  async VerifyUser(token: string, userId: string): Promise<void> {
+    Logger.info('UserService.VerifyUser', { token, userId });
+
+    // Get verification by token
+    const verification = await this.db.v1.User.GetVerificationByToken(token);
+
+    if (!verification) {
+      throw new AppError(400, 'Invalid or expired verification token');
+    }
+
+    // Verify that the token belongs to the authenticated user
+    if (verification.userId !== userId) {
+      throw new AppError(403, 'This verification token does not belong to you');
+    }
+
+    // Mark user as verified
+    await this.db.v1.User.UpdateUser(verification.userId, { isVerified: true });
+
+    // Delete the verification token after successful verification
+    await this.db.v1.User.DeleteVerificationToken(token);
   }
 }

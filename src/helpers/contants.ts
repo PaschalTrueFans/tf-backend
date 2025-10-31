@@ -1,6 +1,4 @@
 //
-
-export const FrontEndLink = 'https://www.localhost:3000';
 export const versionNo = 'v_1';
 export const DB_STATES = {
   '0': 'disconnected',

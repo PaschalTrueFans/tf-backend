@@ -56,4 +56,31 @@ export class EmailService {
       throw error;
     }
   }
+
+  async SendVerificationEmail(email: string, verificationLink: string): Promise<void> {
+    try {
+      // Read the email template
+      const htmlTemplate = fs.readFileSync('src/emailTemplates/emailVerification.html', 'utf-8');
+
+      // Replace placeholders in template
+      const modifiedHtml = htmlTemplate
+        .replace('{{DATE}}', new Date().toLocaleDateString())
+        .replace(/{{VERIFICATION_LINK}}/g, verificationLink);
+
+      Logger.info('Sending verification email to:', email);
+
+      // Send email using nodemailer
+      const info = await this.transporter.sendMail({
+        from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
+        to: email,
+        subject: 'Verify Your Email Address - TRU-FANS',
+        html: modifiedHtml,
+      });
+
+      Logger.info('Verification email sent successfully:', info.messageId);
+    } catch (error) {
+      Logger.error('Error sending verification email:', error);
+      throw error;
+    }
+  }
 }
