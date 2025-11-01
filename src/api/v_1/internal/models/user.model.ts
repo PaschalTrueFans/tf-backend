@@ -54,6 +54,8 @@ export interface CreatorProfile {
 export interface UserResponse extends DefaultTable {
   name: string;
   email: string;
+  bio: string | null;
+  profilePhoto: string | null;
   creator: CreatorProfile | null;
 }
 

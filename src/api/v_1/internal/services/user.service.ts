@@ -38,6 +38,8 @@ export class UserService {
       name: user.name,
       email: user.email,
       creator: null,
+      bio: user.bio || null,
+      profilePhoto: user.profilePhoto || null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
