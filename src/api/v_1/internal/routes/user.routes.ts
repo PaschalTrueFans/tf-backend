@@ -10,6 +10,7 @@ router.use(jwtAuth);
 
 router.get('/', userController.getCurrentUser);
 router.put('/', userController.updateUser);
+router.put('/reset-password', userController.resetPassword);
 
 // Creator routes
 router.get('/creators', userController.getAllCreators);

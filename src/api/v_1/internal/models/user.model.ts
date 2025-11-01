@@ -16,6 +16,16 @@ export const UpdateTempPasswordBodySchema = z.object({
 
 export type UpdateTempPasswordBody = z.infer<typeof UpdateTempPasswordBodySchema>;
 
+export const ResetPasswordBodySchema = z.object({
+  oldPassword: z.string().min(1, 'Old password is required'),
+  newPassword: z.string().min(1, 'New password is required'),
+}).refine((data) => data.oldPassword !== data.newPassword, {
+  message: 'New password must be different from old password',
+  path: ['newPassword'],
+});
+
+export type ResetPasswordBody = z.infer<typeof ResetPasswordBodySchema>;
+
 export const UpdateUserBodySchema = z.object({
   pageName: z.string().optional(),
   creatorName: z.string().optional(),

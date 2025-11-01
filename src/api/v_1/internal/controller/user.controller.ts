@@ -52,6 +52,26 @@ export class UserController {
     res.json(body);
   };
 
+  // Reset password handler
+  public resetPassword = async (req: RequestBody<UserModel.ResetPasswordBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.ResetPasswordBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      await service.ResetPassword(userId, req.body.oldPassword, req.body.newPassword);
+
+      body = {
+        message: 'Password reset successfully',
+      };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
   // Get all creators handler
   public getAllCreators = async (req: RequestQuery<{ page?: string; limit?: string }>, res: Response): Promise<void> => {
     let body;

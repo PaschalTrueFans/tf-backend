@@ -96,6 +96,28 @@ export class UserService {
 
   }
 
+  public async ResetPassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+    Logger.info('UserService.ResetPassword', { userId });
+
+    // Get the user
+    const user = await this.db.v1.User.GetUser({ id: userId });
+
+    if (!user) throw new BadRequest('User not found');
+
+    if (!user.password) throw new BadRequest('No password found for user. Please use forgot password instead.');
+
+    // Verify the old password
+    const isCorrectPassword = await Hash.verifyPassword(oldPassword, user.password);
+
+    if (!isCorrectPassword) throw new BadRequest('Invalid old password');
+
+    // Hash the new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update the password
+    await this.db.v1.User.UpdateUser(userId, { password: hashedPassword });
+  }
+
   public async GetAllCreators(currentUserId?: string, page: number = 1, limit: number = 10): Promise<{
     creators: UserModels.CreatorProfile[];
     pagination: {
