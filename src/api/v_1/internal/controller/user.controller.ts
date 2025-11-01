@@ -378,6 +378,95 @@ export class UserController {
     res.json(body);
   };
 
+  // Product CRUD handlers
+  public createProduct = async (req: RequestBody<UserModel.CreateProductBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.CreateProductBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const id = await service.CreateProduct(creatorId, req.body);
+      body = { data: { id } };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getProducts = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const products = await service.GetProductsByCreator(creatorId);
+      body = { data: products };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getCreatorProducts = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.params.creatorId;
+      const products = await service.GetProductsByCreator(creatorId, false); // Don't validate creator for public endpoint
+      body = { data: products };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getProductById = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const productId = req.params.id;
+      const product = await service.GetProductById(productId);
+      body = { data: product };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public updateProduct = async (req: RequestBody<UserModel.UpdateProductBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.UpdateProductBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const productId = req.params.id;
+      const creatorId = req.userId;
+      const product = await service.UpdateProduct(productId, creatorId, req.body);
+      body = { data: product };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public deleteProduct = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const productId = req.params.id;
+      const creatorId = req.userId;
+      await service.DeleteProduct(productId, creatorId);
+      body = { message: 'Product deleted successfully' };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
   // Comment CRUD handlers
   public addComment = async (req: RequestBody<PostModel.AddCommentBody>, res: Response): Promise<void> => {
     let body;

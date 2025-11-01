@@ -733,6 +733,105 @@ export class UserService {
     await this.db.v1.User.DeleteMembership(membershipId);
   }
 
+  // Product CRUD methods with creator validation
+  public async CreateProduct(creatorId: string, body: any): Promise<string> {
+    Logger.info('UserService.CreateProduct', { creatorId, body });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can create products.');
+    }
+
+    const product: Partial<Entities.Product> = {
+      creatorId,
+      name: body.name,
+      description: body.description,
+      mediaUrl: body.mediaUrl,
+      price: body.price,
+    };
+
+    const id = await this.db.v1.User.CreateProduct(product);
+    return id;
+  }
+
+  public async GetProductsByCreator(creatorId: string, validateCreator: boolean = true): Promise<Entities.Product[]> {
+    Logger.info('UserService.GetProductsByCreator', { creatorId, validateCreator });
+
+    // Check if user is a creator (only if validateCreator is true)
+    if (validateCreator) {
+      const creator = await this.db.v1.User.GetUser({ id: creatorId });
+      if (!creator || !creator.pageName) {
+        throw new BadRequest('You do not have permission for this action. Only creators can view products.');
+      }
+    }
+
+    return await this.db.v1.User.GetProductsByCreator(creatorId);
+  }
+
+  public async GetProductById(productId: string): Promise<Entities.Product | null> {
+    Logger.info('UserService.GetProductById', { productId });
+    return await this.db.v1.User.GetProductById(productId);
+  }
+
+  public async UpdateProduct(productId: string, creatorId: string, body: any): Promise<Entities.Product | null> {
+    Logger.info('UserService.UpdateProduct', { productId, creatorId, body });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can update products.');
+    }
+
+    // Check if product belongs to this creator
+    const product = await this.db.v1.User.GetProductById(productId);
+    if (!product) {
+      throw new BadRequest('Product not found');
+    }
+
+    if (product.creatorId !== creatorId) {
+      throw new BadRequest('You do not have permission to update this product.');
+    }
+
+    const updateData: Partial<Entities.Product> = {
+      name: body.name,
+      description: body.description,
+      mediaUrl: body.mediaUrl,
+      price: body.price,
+    };
+
+    // Remove undefined fields
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key as keyof Entities.Product] === undefined) {
+        delete updateData[key as keyof Entities.Product];
+      }
+    });
+
+    return await this.db.v1.User.UpdateProduct(productId, updateData);
+  }
+
+  public async DeleteProduct(productId: string, creatorId: string): Promise<void> {
+    Logger.info('UserService.DeleteProduct', { productId, creatorId });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can delete products.');
+    }
+
+    // Check if product belongs to this creator
+    const product = await this.db.v1.User.GetProductById(productId);
+    if (!product) {
+      throw new BadRequest('Product not found');
+    }
+
+    if (product.creatorId !== creatorId) {
+      throw new BadRequest('You do not have permission to delete this product.');
+    }
+
+    await this.db.v1.User.DeleteProduct(productId);
+  }
+
   // Comment CRUD methods
   public async AddComment(postId: string, userId: string, comment: string): Promise<string> {
     Logger.info('UserService.AddComment', { postId, userId, comment: comment.substring(0, 50) + '...' });

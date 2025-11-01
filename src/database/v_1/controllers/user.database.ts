@@ -707,6 +707,95 @@ export class UserDatabase {
     }
   }
 
+  // Product CRUD methods
+  async CreateProduct(product: Partial<Entities.Product>): Promise<string> {
+    this.logger.info('Db.CreateProduct', { product });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('products').insert(product, 'id');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CreateProduct failed', err);
+      throw new AppError(400, 'Product not created');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.CreateProduct Product not created', err);
+      throw new AppError(400, 'Product not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
+  async GetProductById(productId: string): Promise<Entities.Product | null> {
+    this.logger.info('Db.GetProductById', { productId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('products').where({ id: productId });
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetProductById failed', err);
+      throw new AppError(400, 'Failed to fetch product');
+    }
+
+    if (!res || res.length === 0) {
+      return null;
+    }
+
+    return res[0];
+  }
+
+  async GetProductsByCreator(creatorId: string): Promise<Entities.Product[]> {
+    this.logger.info('Db.GetProductsByCreator', { creatorId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('products').where({ creatorId }).orderBy('createdAt', 'desc');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetProductsByCreator failed', err);
+      throw new AppError(400, 'Failed to fetch products');
+    }
+
+    return res ?? [];
+  }
+
+  async UpdateProduct(productId: string, updateData: Partial<Entities.Product>): Promise<Entities.Product | null> {
+    this.logger.info('Db.UpdateProduct', { productId, updateData });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('products').where({ id: productId }).update(updateData).returning('*');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateProduct failed', err);
+      throw new AppError(400, 'Product update failed');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.UpdateProduct Product not found or not updated', err);
+      return null;
+    }
+
+    return res[0];
+  }
+
+  async DeleteProduct(productId: string): Promise<void> {
+    this.logger.info('Db.DeleteProduct', { productId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('products').where({ id: productId }).del();
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.DeleteProduct failed', err);
+      throw new AppError(400, 'Product delete failed');
+    }
+  }
+
   // Comment CRUD methods
   async AddComment(postId: string, userId: string, comment: string): Promise<string> {
     this.logger.info('Db.AddComment', { postId, userId, comment });

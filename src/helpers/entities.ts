@@ -88,6 +88,14 @@ export interface Membership extends DefaultTable {
   description?: string;
 }
 
+export interface Product extends DefaultTable {
+  creatorId: string;
+  name: string;
+  description?: string;
+  mediaUrl?: string;
+  price: string;
+}
+
 export interface Subscription extends DefaultTable {
   subscriberId: string;
   creatorId: string;

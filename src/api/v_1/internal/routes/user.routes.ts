@@ -44,8 +44,16 @@ router.get('/memberships/:id', userController.getMembershipById);
 router.put('/memberships/:id', userController.updateMembership);
 router.delete('/memberships/:id', userController.deleteMembership);
 
-
 router.get('/creators/:creatorId/memberships', userController.getCreatorMemberships);
+
+// Product CRUD
+router.post('/products', userController.createProduct);
+router.get('/products', userController.getProducts);
+router.get('/products/:id', userController.getProductById);
+router.put('/products/:id', userController.updateProduct);
+router.delete('/products/:id', userController.deleteProduct);
+
+router.get('/creators/:creatorId/products', userController.getCreatorProducts);
 // Subscription routes
 router.post('/subscribe', userController.subscribeToCreator);
 router.post('/un-subscribe', userController.unSubscribeToCreator);

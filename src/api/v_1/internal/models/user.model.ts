@@ -96,3 +96,31 @@ export interface MembershipResponse extends DefaultTable {
   currency: string;
   description?: string;
 }
+
+// Product schemas
+export const CreateProductBodySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  price: z.string().min(1, 'Price is required'),
+});
+
+export type CreateProductBody = z.infer<typeof CreateProductBodySchema>;
+
+export const UpdateProductBodySchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  description: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  price: z.string().min(1, 'Price is required').optional(),
+});
+
+export type UpdateProductBody = z.infer<typeof UpdateProductBodySchema>;
+
+// Product response interface
+export interface ProductResponse extends DefaultTable {
+  creatorId: string;
+  name: string;
+  description?: string;
+  mediaUrl?: string;
+  price: string;
+}
