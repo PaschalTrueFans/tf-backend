@@ -189,6 +189,8 @@ export class UserService {
     const creator = await this.db.v1.User.GetCreatorByIdWithFollowStatus(creatorId, currentUserId);
     const recentPosts = await this.db.v1.User.GetRecentPostsByCreator(creatorId);
 
+    Logger.info("creator", creator);
+
     const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId , currentUserId);
 
     return {

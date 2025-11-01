@@ -151,7 +151,7 @@ export class UserDatabase {
     const query = knexdb('users')
       .select([
         'users.*',
-        knexdb.raw('COUNT(followers.id) as followersCount'),
+        knexdb.raw('COUNT(followers.id) as "followersCount"'),
         knexdb.raw('categories.name as category'),
         knexdb.raw(`
           bool_or(user_follows.id IS NOT NULL) as isFollowing
@@ -164,6 +164,7 @@ export class UserDatabase {
             .andOn('user_follows.followerId', '=', knexdb.raw('?', [currentUserId]));
       })
       .whereNotNull('users.pageName')
+      .andWhere('users.id', '!=', knexdb.raw('?', [currentUserId]))
       // .andWhereNot('users.id', knexdb.raw('?', [currentUserId]))
       .groupBy('users.id', 'categories.id', 'categories.name')
       .orderBy('users.createdAt', 'desc')
@@ -212,7 +213,7 @@ export class UserDatabase {
     const query = knexdb('users')
     .select([
       'users.*',
-      knexdb.raw('COUNT(followers.id) as followersCount'),
+      knexdb.raw('COUNT(followers.id) as "followersCount"'),
       knexdb.raw('COUNT(DISTINCT subscriptions.id) as "subscribersCount"'),
       knexdb.raw('bool_or(user_subscriptions.id IS NOT NULL) as "isSubscriber"'),
       knexdb.raw(`
@@ -231,7 +232,7 @@ export class UserDatabase {
     })
     .where('users.id', creatorId)
     .whereNotNull('users.pageName')
-    .groupBy('users.id')
+    .groupBy('users.id' , 'followers.id')
     .first()
 
     const { res, err } = await this.RunQuery(query);
