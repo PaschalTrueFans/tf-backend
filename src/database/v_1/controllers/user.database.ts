@@ -165,7 +165,7 @@ export class UserDatabase {
       })
       .whereNotNull('users.pageName')
       // .andWhereNot('users.id', knexdb.raw('?', [currentUserId]))
-      .groupBy('users.id')
+      .groupBy('users.id', 'categories.id', 'categories.name')
       .orderBy('users.createdAt', 'desc')
       .limit(limit)
       .offset(offset);

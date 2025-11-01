@@ -72,6 +72,36 @@ export class ChatController {
     }
     res.json(body);
   };
+
+  public markConversationAsRead = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const db = res.locals.db as Db;
+      const userId = req.userId;
+      const conversationId = req.params.conversationId;
+
+      const isAllowed = await db.v1.Chat.IsUserInConversation(userId, conversationId);
+      if (!isAllowed) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+
+      await db.v1.Chat.MarkConversationAsRead(conversationId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      genericError(error, res);
+    }
+  };
+
+  public getUnreadCount = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const db = res.locals.db as Db;
+      const userId = req.userId;
+      const unreadCount = await db.v1.Chat.GetTotalUnreadCount(userId);
+      res.json({ data: { unreadCount } });
+    } catch (error) {
+      genericError(error, res);
+    }
+  };
 }
 
 

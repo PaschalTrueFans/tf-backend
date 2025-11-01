@@ -23,7 +23,7 @@ export const jwtAuth = async (
     const db = res.locals.db as Db;
     const userData = await db.v1.User.GetUser({ id: decoded.id });
 
-    if (!userData) return res.status(400).json({ Error: true, Msg: 'Invalid token' });
+    if (!userData) return res.status(401).json({ Error: true, Msg: 'Invalid token' });
 
     if (!all) {
       // Skip user type checking since we removed UserTypes

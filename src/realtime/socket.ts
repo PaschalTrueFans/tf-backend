@@ -70,6 +70,8 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
           return;
         }
         socket.join(conversationId);
+        // Mark conversation as read when user opens it
+        await db.v1.Chat.MarkConversationAsRead(conversationId, socket.data.userId);
       } catch (e) {
         socket.emit('error', { message: 'Failed to join room' });
       }
