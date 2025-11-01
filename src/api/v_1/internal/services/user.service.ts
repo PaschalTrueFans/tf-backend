@@ -192,6 +192,7 @@ export class UserService {
     Logger.info("creator", creator);
 
     const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId , currentUserId);
+    const products = await this.db.v1.User.GetProductsByCreator(creatorId);
 
     return {
       id: creator.id,
@@ -224,41 +225,42 @@ export class UserService {
         totalComments: parseInt(post.totalComments) || 0,
         mediaFiles: post.mediaFiles || [],
       })),
-      exploreOthers: [
-        {
-          id:  '1',
-          title:  'Title 1',
-          createdAt: new Date().toISOString(),
-          public:  true,
-          totalLikes:  10,
-          totalComments: 10,
-        },
-        {
-          id: '2',
-          title: 'Title 2',
-          public:  false,
-          createdAt:  new Date().toISOString(),
-          totalLikes:  15,
-          totalComments:  15,
-        },
-        {
-          id:  '3',
-          title:  'Title 3',
-          createdAt: new Date().toISOString(),
-          public:  true,
-          totalLikes:  10,
-          totalComments: 10,
-        },
-        {
-          id: '4',
-          title: 'Title 4',
-          public:  false,
-          createdAt:  new Date().toISOString(),
-          totalLikes:  15,
-          totalComments:  15,
-        },
+      products: products,
+      // exploreOthers: [
+      //   {
+      //     id:  '1',
+      //     title:  'Title 1',
+      //     createdAt: new Date().toISOString(),
+      //     public:  true,
+      //     totalLikes:  10,
+      //     totalComments: 10,
+      //   },
+      //   {
+      //     id: '2',
+      //     title: 'Title 2',
+      //     public:  false,
+      //     createdAt:  new Date().toISOString(),
+      //     totalLikes:  15,
+      //     totalComments:  15,
+      //   },
+      //   {
+      //     id:  '3',
+      //     title:  'Title 3',
+      //     createdAt: new Date().toISOString(),
+      //     public:  true,
+      //     totalLikes:  10,
+      //     totalComments: 10,
+      //   },
+      //   {
+      //     id: '4',
+      //     title: 'Title 4',
+      //     public:  false,
+      //     createdAt:  new Date().toISOString(),
+      //     totalLikes:  15,
+      //     totalComments:  15,
+      //   },
       
-      ]
+      // ]
     }
   }
 
