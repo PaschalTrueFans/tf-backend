@@ -1617,7 +1617,6 @@ export class UserDatabase {
       .select('*')
       .where('token', token)
       .where('createdAt', '>', OneDayAgo)
-      .first();
 
     const { res, err } = await this.RunQuery(query);
 
@@ -1625,6 +1624,8 @@ export class UserDatabase {
       this.logger.error('Db.GetVerificationByToken Error getting verification', err);
       return undefined;
     }
+
+    console.log("res", res);
 
     if (!res || res.length === 0) {
       this.logger.info('Db.GetVerificationByToken No valid verification found');

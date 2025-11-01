@@ -37,6 +37,7 @@ export class UserService {
       id: user.id,
       name: user.name,
       email: user.email,
+      isVerified: user.isVerified || false,
       creator: null,
       bio: user.bio || null,
       profilePhoto: user.profilePhoto || null,
@@ -1208,7 +1209,7 @@ export class UserService {
     await this.db.v1.User.StoreVerificationToken({ userId: user.id, token });
 
     // Create verification link
-    const verificationLink = `${FrontEndLink.FRONT_END_LINK}/verify?token=${token}`;
+    const verificationLink = `${FrontEndLink.FRONT_END_LINK}verify?token=${token}`;
 
     // Send verification email
     await this.emailService.SendVerificationEmail(user.email, verificationLink);
