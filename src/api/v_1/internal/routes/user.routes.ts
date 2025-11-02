@@ -54,6 +54,19 @@ router.put('/products/:id', userController.updateProduct);
 router.delete('/products/:id', userController.deleteProduct);
 
 router.get('/creators/:creatorId/products', userController.getCreatorProducts);
+
+// Event CRUD
+router.post('/events', userController.createEvent);
+router.get('/events', userController.getEvents);
+router.get('/events/:id', userController.getEventById);
+router.put('/events/:id', userController.updateEvent);
+router.delete('/events/:id', userController.deleteEvent);
+
+// Event Interest
+router.post('/events/:eventId/interest', userController.toggleEventInterest);
+
+// Get all future events
+router.get('/all-events', userController.getAllEvents);
 // Subscription routes
 router.post('/subscribe', userController.subscribeToCreator);
 router.post('/un-subscribe', userController.unSubscribeToCreator);

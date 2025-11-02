@@ -96,6 +96,14 @@ export interface Product extends DefaultTable {
   price: string;
 }
 
+export interface Event extends DefaultTable {
+  creatorId: string;
+  name: string;
+  description?: string;
+  mediaUrl?: string;
+  eventDate?: string;
+}
+
 export interface Subscription extends DefaultTable {
   subscriberId: string;
   creatorId: string;
@@ -167,4 +175,9 @@ export interface GroupInvite extends DefaultTable {
   groupName: string;
   platform: string;
   link: string;
+}
+
+export interface PeopleInterested extends DefaultTable {
+  userId: string;
+  eventId: string;
 }

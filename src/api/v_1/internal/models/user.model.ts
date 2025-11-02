@@ -125,3 +125,31 @@ export interface ProductResponse extends DefaultTable {
   mediaUrl?: string;
   price: string;
 }
+
+// Event schemas
+export const CreateEventBodySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  eventDate: z.string().optional(),
+});
+
+export type CreateEventBody = z.infer<typeof CreateEventBodySchema>;
+
+export const UpdateEventBodySchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  description: z.string().optional(),
+  mediaUrl: z.string().optional(),
+  eventDate: z.string().optional(),
+});
+
+export type UpdateEventBody = z.infer<typeof UpdateEventBodySchema>;
+
+// Event response interface
+export interface EventResponse extends DefaultTable {
+  creatorId: string;
+  name: string;
+  description?: string;
+  mediaUrl?: string;
+  eventDate?: string;
+}

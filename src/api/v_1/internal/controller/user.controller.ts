@@ -467,6 +467,111 @@ export class UserController {
     res.json(body);
   };
 
+  // Event CRUD handlers
+  public createEvent = async (req: RequestBody<UserModel.CreateEventBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.CreateEventBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const id = await service.CreateEvent(creatorId, req.body);
+      body = { data: { id } };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getEvents = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const events = await service.GetEventsByCreator(creatorId);
+      body = { data: events };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getEventById = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const eventId = req.params.id;
+      const event = await service.GetEventById(eventId);
+      body = { data: event };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public updateEvent = async (req: RequestBody<UserModel.UpdateEventBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.UpdateEventBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const eventId = req.params.id;
+      const creatorId = req.userId;
+      const event = await service.UpdateEvent(eventId, creatorId, req.body);
+      body = { data: event };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public deleteEvent = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const eventId = req.params.id;
+      const creatorId = req.userId;
+      await service.DeleteEvent(eventId, creatorId);
+      body = { message: 'Event deleted successfully' };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Event Interest handler
+  public toggleEventInterest = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const eventId = req.params.eventId;
+      const userId = req.userId;
+      const result = await service.ToggleEventInterest(userId, eventId);
+      body = { data: result };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  // Get all future events
+  public getAllEvents = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const events = await service.GetAllFutureEvents();
+      body = { data: events };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
   // Comment CRUD handlers
   public addComment = async (req: RequestBody<PostModel.AddCommentBody>, res: Response): Promise<void> => {
     let body;

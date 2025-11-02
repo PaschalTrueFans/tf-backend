@@ -835,6 +835,157 @@ export class UserService {
     await this.db.v1.User.DeleteProduct(productId);
   }
 
+  // Event CRUD methods with creator validation
+  public async CreateEvent(creatorId: string, body: any): Promise<string> {
+    Logger.info('UserService.CreateEvent', { creatorId, body });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can create events.');
+    }
+
+    const event: Partial<Entities.Event> = {
+      creatorId,
+      name: body.name,
+      description: body.description,
+      mediaUrl: body.mediaUrl,
+      eventDate: body.eventDate,
+    };
+
+    const id = await this.db.v1.User.CreateEvent(event);
+    return id;
+  }
+
+  public async GetEventsByCreator(creatorId: string): Promise<Entities.Event[]> {
+    Logger.info('UserService.GetEventsByCreator', { creatorId });
+
+    // Check if user is a creator (only if validateCreator is true)
+      const creator = await this.db.v1.User.GetUser({ id: creatorId });
+      if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can view events.');
+    }
+
+    return await this.db.v1.User.GetEventsByCreator(creatorId);
+  }
+
+  public async GetEventById(eventId: string): Promise<Entities.Event | null> {
+    Logger.info('UserService.GetEventById', { eventId });
+    return await this.db.v1.User.GetEventById(eventId);
+  }
+
+  public async GetAllFutureEvents(): Promise<Entities.Event[]> {
+    Logger.info('UserService.GetAllFutureEvents');
+    return await this.db.v1.User.GetAllFutureEvents();
+  }
+
+  public async UpdateEvent(eventId: string, creatorId: string, body: any): Promise<Entities.Event | null> {
+    Logger.info('UserService.UpdateEvent', { eventId, creatorId, body });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can update events.');
+    }
+
+    // Check if event belongs to this creator
+    const event = await this.db.v1.User.GetEventById(eventId);
+    if (!event) {
+      throw new BadRequest('Event not found');
+    }
+
+    if (event.creatorId !== creatorId) {
+      throw new BadRequest('You do not have permission to update this event.');
+    }
+
+    const updateData: Partial<Entities.Event> = {
+      name: body.name,
+      description: body.description,
+      mediaUrl: body.mediaUrl,
+      eventDate: body.eventDate,
+    };
+
+    // Remove undefined fields
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key as keyof Entities.Event] === undefined) {
+        delete updateData[key as keyof Entities.Event];
+      }
+    });
+
+    return await this.db.v1.User.UpdateEvent(eventId, updateData);
+  }
+
+  public async DeleteEvent(eventId: string, creatorId: string): Promise<void> {
+    Logger.info('UserService.DeleteEvent', { eventId, creatorId });
+
+    // Check if user is a creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
+      throw new BadRequest('You do not have permission for this action. Only creators can delete events.');
+    }
+
+    // Check if event belongs to this creator
+    const event = await this.db.v1.User.GetEventById(eventId);
+    if (!event) {
+      throw new BadRequest('Event not found');
+    }
+
+    if (event.creatorId !== creatorId) {
+      throw new BadRequest('You do not have permission to delete this event.');
+    }
+
+    await this.db.v1.User.DeleteEvent(eventId);
+  }
+
+  // Event Interest methods
+  public async ToggleEventInterest(userId: string, eventId: string): Promise<{ action: 'interested' | 'not_interested'; isInterested: boolean }> {
+    Logger.info('UserService.ToggleEventInterest', { userId, eventId });
+
+    // Verify that the event exists
+    const event = await this.db.v1.User.GetEventById(eventId);
+    if (!event) {
+      throw new BadRequest('Event not found');
+    }
+
+    // Prevent creator from showing interest in their own event
+    if (event.creatorId === userId) {
+      throw new BadRequest('You cannot show interest in your own event.');
+    }
+
+    const result = await this.db.v1.User.ToggleEventInterest(userId, eventId);
+
+    // Create notification for creator when someone shows interest
+    if (result.action === 'interested') {
+      try {
+        const interestedUser = await this.db.v1.User.GetUser({ id: userId });
+        const creator = await this.db.v1.User.GetUser({ id: event.creatorId });
+        
+        const notification: Partial<Entities.Notification> = {
+          userId: event.creatorId, // Creator receives the notification
+          title: 'New Event Interest!',
+          message: `${interestedUser?.name || interestedUser?.creatorName || 'Someone'} is interested in your event "${event.name}"`,
+          redirectUrl: `/event/${eventId}`,
+          fromUserId: userId,
+          type: 'creator',
+          isRead: false,
+        };
+        
+        await this.CreateNotification(notification);
+        
+        Logger.info('UserService.ToggleEventInterest - Creator notification created', { 
+          creatorId: event.creatorId, 
+          userId: userId,
+          eventId: eventId
+        });
+      } catch (error) {
+        // Log error but don't fail the interest action
+        Logger.error('UserService.ToggleEventInterest - Failed to create creator notification', error);
+      }
+    }
+
+    return result;
+  }
+
   // Comment CRUD methods
   public async AddComment(postId: string, userId: string, comment: string): Promise<string> {
     Logger.info('UserService.AddComment', { postId, userId, comment: comment.substring(0, 50) + '...' });

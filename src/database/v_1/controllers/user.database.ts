@@ -796,6 +796,187 @@ export class UserDatabase {
     }
   }
 
+  // Event CRUD methods
+  async CreateEvent(event: Partial<Entities.Event>): Promise<string> {
+    this.logger.info('Db.CreateEvent', { event });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('events').insert(event, 'id');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CreateEvent failed', err);
+      throw new AppError(400, 'Event not created');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.CreateEvent Event not created', err);
+      throw new AppError(400, 'Event not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
+  async GetEventById(eventId: string): Promise<Entities.Event | null> {
+    this.logger.info('Db.GetEventById', { eventId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('events').where({ id: eventId });
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetEventById failed', err);
+      throw new AppError(400, 'Failed to fetch event');
+    }
+
+    if (!res || res.length === 0) {
+      return null;
+    }
+
+    return res[0];
+  }
+
+  async GetEventsByCreator(creatorId: string): Promise<Entities.Event[]> {
+    this.logger.info('Db.GetEventsByCreator', { creatorId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('events').where({ creatorId }).orderBy('createdAt', 'desc');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetEventsByCreator failed', err);
+      throw new AppError(400, 'Failed to fetch events');
+    }
+
+    return res ?? [];
+  }
+
+  async GetAllFutureEvents(): Promise<Entities.Event[]> {
+    this.logger.info('Db.GetAllFutureEvents');
+
+    const knexdb = this.GetKnex();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of today
+    
+    // Get events where eventDate is today or in the future, ordered by eventDate
+    const query = knexdb('events')
+      .where(function() {
+        this.where('eventDate', '>=', today.toISOString())
+            .orWhereNull('eventDate'); // Include events without a date set
+      })
+      .orderBy('eventDate', 'asc') // Order by eventDate ascending (earliest first)
+      .orderBy('createdAt', 'desc'); // Secondary sort by createdAt for events without date or same date
+    
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetAllFutureEvents failed', err);
+      throw new AppError(400, 'Failed to fetch events');
+    }
+
+    return res ?? [];
+  }
+
+  async UpdateEvent(eventId: string, updateData: Partial<Entities.Event>): Promise<Entities.Event | null> {
+    this.logger.info('Db.UpdateEvent', { eventId, updateData });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('events').where({ id: eventId }).update(updateData).returning('*');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateEvent failed', err);
+      throw new AppError(400, 'Event update failed');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.UpdateEvent Event not found or not updated', err);
+      return null;
+    }
+
+    return res[0];
+  }
+
+  async DeleteEvent(eventId: string): Promise<void> {
+    this.logger.info('Db.DeleteEvent', { eventId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('events').where({ id: eventId }).del();
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.DeleteEvent failed', err);
+      throw new AppError(400, 'Event delete failed');
+    }
+  }
+
+  // Event Interest methods
+  async ToggleEventInterest(userId: string, eventId: string): Promise<{ action: 'interested' | 'not_interested'; isInterested: boolean }> {
+    this.logger.info('Db.ToggleEventInterest', { userId, eventId });
+
+    const knexdb = this.GetKnex();
+
+    // Check if already interested
+    const checkQuery = knexdb('people_interested')
+      .where({ userId, eventId });
+    
+    const { res: existingInterest, err: checkErr } = await this.RunQuery(checkQuery);
+
+    if (checkErr) {
+      this.logger.error('Db.ToggleEventInterest check failed', checkErr);
+      throw new AppError(400, 'Failed to check event interest');
+    }
+
+    if (existingInterest && existingInterest.length > 0) {
+      // Remove interest
+      const deleteQuery = knexdb('people_interested')
+        .where({ userId, eventId })
+        .del();
+      
+      const { err: deleteErr } = await this.RunQuery(deleteQuery);
+
+      if (deleteErr) {
+        this.logger.error('Db.ToggleEventInterest delete failed', deleteErr);
+        throw new AppError(400, 'Failed to remove event interest');
+      }
+      
+      return { action: 'not_interested', isInterested: false };
+    } else {
+      // Add interest
+      const insertQuery = knexdb('people_interested')
+        .insert({ userId, eventId });
+      
+      const { err: insertErr } = await this.RunQuery(insertQuery);
+
+      if (insertErr) {
+        this.logger.error('Db.ToggleEventInterest insert failed', insertErr);
+        throw new AppError(400, 'Failed to add event interest');
+      }
+      
+      return { action: 'interested', isInterested: true };
+    }
+  }
+
+  async GetEventInterest(userId: string, eventId: string): Promise<Entities.PeopleInterested | null> {
+    this.logger.info('Db.GetEventInterest', { userId, eventId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('people_interested').where({ userId, eventId }).first();
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetEventInterest failed', err);
+      throw new AppError(400, 'Failed to check event interest');
+    }
+
+    if (!res || res.length === 0) {
+      return null;
+    }
+
+    return res[0];
+  }
+
   // Comment CRUD methods
   async AddComment(postId: string, userId: string, comment: string): Promise<string> {
     this.logger.info('Db.AddComment', { postId, userId, comment });
