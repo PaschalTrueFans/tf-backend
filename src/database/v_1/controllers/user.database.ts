@@ -818,11 +818,35 @@ export class UserDatabase {
     return id;
   }
 
-  async GetEventById(eventId: string): Promise<Entities.Event | null> {
-    this.logger.info('Db.GetEventById', { eventId });
+  async GetEventById(eventId: string, currentUserId?: string): Promise<any | null> {
+    this.logger.info('Db.GetEventById', { eventId, currentUserId });
 
     const knexdb = this.GetKnex();
-    const query = knexdb('events').where({ id: eventId });
+    const query = knexdb('events')
+      .leftJoin('users', 'events.creatorId', 'users.id')
+      .leftJoin('people_interested', function() {
+        this.on('events.id', '=', 'people_interested.eventId');
+        if (currentUserId) {
+          this.andOn('people_interested.userId', '=', knexdb.raw('?', [currentUserId]));
+        }
+      })
+      .select(
+        'events.*',
+        'users.name as creatorName',
+        'users.pageName as creatorPageName',
+        'users.profilePhoto as creatorProfilePhoto',
+        knexdb.raw(currentUserId 
+          ? 'BOOL_OR(people_interested.id IS NOT NULL) as "isInterested"'
+          : 'false as "isInterested"'
+        ),
+        knexdb.raw(`
+          (SELECT COUNT(*)::int FROM people_interested WHERE people_interested."eventId" = events.id) as "interestedCount"
+        `)
+      )
+      .where({ 'events.id': eventId })
+      .groupBy('events.id', 'users.id')
+      .first();
+    
     const { res, err } = await this.RunQuery(query);
 
     if (err) {
@@ -834,7 +858,14 @@ export class UserDatabase {
       return null;
     }
 
-    return res[0];
+    const event = res[0] || res;
+    
+    // Convert isInterested from database boolean to JavaScript boolean
+    return {
+      ...event,
+      isInterested: currentUserId ? (event.isInterested === true || event.isInterested === 't' || event.isInterested === 1) : false,
+      interestedCount: parseInt(event.interestedCount) || 0
+    };
   }
 
   async GetEventsByCreator(creatorId: string, currentUserId?: string): Promise<any[]> {

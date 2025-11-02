@@ -870,9 +870,10 @@ export class UserService {
     return await this.db.v1.User.GetEventsByCreator(creatorId, currentUserId);
   }
 
-  public async GetEventById(eventId: string): Promise<Entities.Event | null> {
-    Logger.info('UserService.GetEventById', { eventId });
-    return await this.db.v1.User.GetEventById(eventId);
+  public async GetEventById(eventId: string, currentUserId?: string): Promise<any | null> {
+    Logger.info('UserService.GetEventById', { eventId, currentUserId });
+    const event = await this.db.v1.User.GetEventById(eventId, currentUserId);
+    return event;
   }
 
   public async GetAllFutureEvents(currentUserId?: string): Promise<any[]> {

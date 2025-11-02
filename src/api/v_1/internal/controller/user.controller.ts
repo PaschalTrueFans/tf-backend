@@ -504,7 +504,8 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const eventId = req.params.id;
-      const event = await service.GetEventById(eventId);
+      const currentUserId = req.userId; // Get current user ID for interest status
+      const event = await service.GetEventById(eventId, currentUserId);
       body = { data: event };
     } catch (error) {
       genericError(error, res);
