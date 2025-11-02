@@ -837,11 +837,28 @@ export class UserDatabase {
     return res[0];
   }
 
-  async GetEventsByCreator(creatorId: string): Promise<Entities.Event[]> {
-    this.logger.info('Db.GetEventsByCreator', { creatorId });
+  async GetEventsByCreator(creatorId: string, currentUserId?: string): Promise<any[]> {
+    this.logger.info('Db.GetEventsByCreator', { creatorId, currentUserId });
 
     const knexdb = this.GetKnex();
-    const query = knexdb('events').where({ creatorId }).orderBy('createdAt', 'desc');
+    const query = knexdb('events')
+      .leftJoin('people_interested', function() {
+        this.on('events.id', '=', 'people_interested.eventId');
+        if (currentUserId) {
+          this.andOn('people_interested.userId', '=', knexdb.raw('?', [currentUserId]));
+        }
+      })
+      .where({ 'events.creatorId': creatorId })
+      .select(
+        'events.*',
+        knexdb.raw(currentUserId 
+          ? 'BOOL_OR(people_interested.id IS NOT NULL) as "isInterested"'
+          : 'false as "isInterested"'
+        )
+      )
+      .groupBy('events.id')
+      .orderBy('events.createdAt', 'desc');
+    
     const { res, err } = await this.RunQuery(query);
 
     if (err) {
@@ -849,11 +866,15 @@ export class UserDatabase {
       throw new AppError(400, 'Failed to fetch events');
     }
 
-    return res ?? [];
+    // Convert isInterested from database boolean to JavaScript boolean
+    return (res ?? []).map((event: any) => ({
+      ...event,
+      isInterested: currentUserId ? (event.isInterested === true || event.isInterested === 't' || event.isInterested === 1) : false
+    }));
   }
 
-  async GetAllFutureEvents(): Promise<Entities.Event[]> {
-    this.logger.info('Db.GetAllFutureEvents');
+  async GetAllFutureEvents(currentUserId?: string): Promise<any[]> {
+    this.logger.info('Db.GetAllFutureEvents', { currentUserId });
 
     const knexdb = this.GetKnex();
     const today = new Date();
@@ -861,12 +882,27 @@ export class UserDatabase {
     
     // Get events where eventDate is today or in the future, ordered by eventDate
     const query = knexdb('events')
-      .where(function() {
-        this.where('eventDate', '>=', today.toISOString())
-            .orWhereNull('eventDate'); // Include events without a date set
+      .leftJoin('people_interested', function() {
+        this.on('events.id', '=', 'people_interested.eventId');
+        if (currentUserId) {
+          this.andOn('people_interested.userId', '=', knexdb.raw('?', [currentUserId]));
+        }
       })
-      .orderBy('eventDate', 'asc') // Order by eventDate ascending (earliest first)
-      .orderBy('createdAt', 'desc'); // Secondary sort by createdAt for events without date or same date
+      .where(function() {
+        this.where('events.eventDate', '>=', today.toISOString())
+            .orWhereNull('events.eventDate'); // Include events without a date set
+      })
+      .select(
+        'events.*',
+        knexdb.raw(currentUserId 
+          ? 'BOOL_OR(people_interested.id IS NOT NULL) as "isInterested"'
+          : 'false as "isInterested"'
+        )
+      )
+      .whereNot('events.creatorId', knexdb.raw('?', [currentUserId]))
+      .groupBy('events.id')
+      .orderBy('events.eventDate', 'asc') // Order by eventDate ascending (earliest first)
+      .orderBy('events.createdAt', 'desc'); // Secondary sort by createdAt for events without date or same date
     
     const { res, err } = await this.RunQuery(query);
 
@@ -875,7 +911,11 @@ export class UserDatabase {
       throw new AppError(400, 'Failed to fetch events');
     }
 
-    return res ?? [];
+    // Convert isInterested from database boolean to JavaScript boolean
+    return (res ?? []).map((event: any) => ({
+      ...event,
+      isInterested: currentUserId ? (event.isInterested === true || event.isInterested === 't' || event.isInterested === 1) : false
+    }));
   }
 
   async UpdateEvent(eventId: string, updateData: Partial<Entities.Event>): Promise<Entities.Event | null> {

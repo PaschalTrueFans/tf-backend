@@ -194,7 +194,7 @@ export class UserService {
 
     const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId , currentUserId);
     const products = await this.db.v1.User.GetProductsByCreator(creatorId);
-
+    const events = await this.db.v1.User.GetEventsByCreator(creatorId, currentUserId);
     return {
       id: creator.id,
       pageName: creator.pageName,
@@ -227,6 +227,7 @@ export class UserService {
         mediaFiles: post.mediaFiles || [],
       })),
       products: products,
+      events: events,
       // exploreOthers: [
       //   {
       //     id:  '1',
@@ -857,8 +858,8 @@ export class UserService {
     return id;
   }
 
-  public async GetEventsByCreator(creatorId: string): Promise<Entities.Event[]> {
-    Logger.info('UserService.GetEventsByCreator', { creatorId });
+  public async GetEventsByCreator(creatorId: string, currentUserId?: string): Promise<any[]> {
+    Logger.info('UserService.GetEventsByCreator', { creatorId, currentUserId });
 
     // Check if user is a creator (only if validateCreator is true)
       const creator = await this.db.v1.User.GetUser({ id: creatorId });
@@ -866,7 +867,7 @@ export class UserService {
       throw new BadRequest('You do not have permission for this action. Only creators can view events.');
     }
 
-    return await this.db.v1.User.GetEventsByCreator(creatorId);
+    return await this.db.v1.User.GetEventsByCreator(creatorId, currentUserId);
   }
 
   public async GetEventById(eventId: string): Promise<Entities.Event | null> {
@@ -874,9 +875,9 @@ export class UserService {
     return await this.db.v1.User.GetEventById(eventId);
   }
 
-  public async GetAllFutureEvents(): Promise<Entities.Event[]> {
-    Logger.info('UserService.GetAllFutureEvents');
-    return await this.db.v1.User.GetAllFutureEvents();
+  public async GetAllFutureEvents(currentUserId?: string): Promise<any[]> {
+    Logger.info('UserService.GetAllFutureEvents', { currentUserId });
+    return await this.db.v1.User.GetAllFutureEvents(currentUserId);
   }
 
   public async UpdateEvent(eventId: string, creatorId: string, body: any): Promise<Entities.Event | null> {

@@ -489,7 +489,8 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const creatorId = req.userId;
-      const events = await service.GetEventsByCreator(creatorId);
+      const currentUserId = req.userId;
+      const events = await service.GetEventsByCreator(creatorId, currentUserId);
       body = { data: events };
     } catch (error) {
       genericError(error, res);
@@ -564,7 +565,8 @@ export class UserController {
     try {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
-      const events = await service.GetAllFutureEvents();
+      const currentUserId = req.userId;
+      const events = await service.GetAllFutureEvents(currentUserId);
       body = { data: events };
     } catch (error) {
       genericError(error, res);
