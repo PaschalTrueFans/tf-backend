@@ -132,6 +132,9 @@ export const CreateEventBodySchema = z.object({
   description: z.string().optional(),
   mediaUrl: z.string().optional(),
   eventDate: z.string().optional(),
+  liveStreamLink: z.string().optional(),
+  isFree: z.boolean().optional().default(true),
+  memberShipId: z.string().optional(),
 });
 
 export type CreateEventBody = z.infer<typeof CreateEventBodySchema>;
@@ -141,6 +144,9 @@ export const UpdateEventBodySchema = z.object({
   description: z.string().optional(),
   mediaUrl: z.string().optional(),
   eventDate: z.string().optional(),
+  liveStreamLink: z.string().optional(),
+  isFree: z.boolean().optional(),
+  memberShipId: z.string().optional(),
 });
 
 export type UpdateEventBody = z.infer<typeof UpdateEventBodySchema>;
@@ -152,4 +158,7 @@ export interface EventResponse extends DefaultTable {
   description?: string;
   mediaUrl?: string;
   eventDate?: string;
+  liveStreamLink?: string;
+  isFree?: boolean;
+  memberShipId?: string;
 }

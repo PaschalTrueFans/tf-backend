@@ -852,6 +852,9 @@ export class UserService {
       description: body.description,
       mediaUrl: body.mediaUrl,
       eventDate: body.eventDate,
+      liveStreamLink: body.liveStreamLink,
+      isFree: body.isFree,
+      memberShipId: body.memberShipId,
     };
 
     const id = await this.db.v1.User.CreateEvent(event);
@@ -905,6 +908,9 @@ export class UserService {
       description: body.description,
       mediaUrl: body.mediaUrl,
       eventDate: body.eventDate,
+      liveStreamLink: body.liveStreamLink,
+      isFree: body.isFree,
+      memberShipId: body.memberShipId,
     };
 
     // Remove undefined fields

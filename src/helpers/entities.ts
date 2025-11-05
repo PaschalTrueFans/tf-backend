@@ -102,6 +102,9 @@ export interface Event extends DefaultTable {
   description?: string;
   mediaUrl?: string;
   eventDate?: string;
+  liveStreamLink?: string;
+  isFree?: boolean;
+  memberShipId?: string;
 }
 
 export interface Subscription extends DefaultTable {

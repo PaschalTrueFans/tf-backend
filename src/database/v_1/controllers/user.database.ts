@@ -931,6 +931,7 @@ export class UserDatabase {
         )
       )
       .whereNot('events.creatorId', knexdb.raw('?', [currentUserId]))
+      .where('events.isFree', true)
       .groupBy('events.id')
       .orderBy('events.eventDate', 'asc') // Order by eventDate ascending (earliest first)
       .orderBy('events.createdAt', 'desc'); // Secondary sort by createdAt for events without date or same date
