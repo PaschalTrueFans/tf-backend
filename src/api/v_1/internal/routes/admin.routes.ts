@@ -12,6 +12,7 @@ router.use(jwtAdminAuth);
 router.get('/dashboard', adminController.getDashboardOverview);
 router.get('/users', adminController.getUsers);
 router.put('/users/:userId/block', adminController.updateUserBlockStatus);
+router.get('/transactions', adminController.getTransactions);
 
 export { router as adminRoutes };
 

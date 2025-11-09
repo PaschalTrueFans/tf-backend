@@ -52,6 +52,27 @@ export class AdminController {
     res.json(body);
   };
 
+  public getTransactions = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const search = (req.query.search as string) || undefined;
+      const status = (req.query.status as string) || undefined;
+
+      const response = await service.GetTransactions({ page, limit, search, status });
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+
+    res.json(body);
+  };
+
   public updateUserBlockStatus = async (req: RequestBody<{ isBlocked: boolean }>, res: Response): Promise<void> => {
     let body;
     try {

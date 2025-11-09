@@ -42,3 +42,32 @@ export interface AdminUserListResponse {
   };
 }
 
+export interface AdminTransactionListItem {
+  id: string;
+  user: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  };
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface AdminTransactionListFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+}
+
+export interface AdminTransactionListResponse {
+  transactions: AdminTransactionListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+

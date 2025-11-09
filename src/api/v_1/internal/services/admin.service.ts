@@ -107,5 +107,46 @@ export class AdminService {
       throw error;
     }
   }
+
+  async GetTransactions(filters: AdminModel.AdminTransactionListFilters): Promise<AdminModel.AdminTransactionListResponse> {
+    try {
+      Logger.info('AdminService.GetTransactions', filters);
+
+      const page = filters.page ?? 1;
+      const limit = filters.limit ?? 10;
+
+      const { transactions, total } = await this.db.v1.Admin.GetTransactionsWithFilters({
+        page,
+        limit,
+        search: filters.search,
+        status: filters.status,
+      });
+
+      const items: AdminModel.AdminTransactionListItem[] = transactions.map((transaction) => ({
+        id: transaction.id,
+        user: {
+          id: transaction.userId,
+          name: transaction.userName,
+          email: transaction.userEmail,
+        },
+        amount: parseFloat(transaction.amount || '0'),
+        status: transaction.status,
+        createdAt: transaction.createdAt,
+      }));
+
+      return {
+        transactions: items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    } catch (error) {
+      Logger.error('AdminService.GetTransactions Error', error);
+      throw error;
+    }
+  }
 }
 
