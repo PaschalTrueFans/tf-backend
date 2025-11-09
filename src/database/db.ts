@@ -6,6 +6,7 @@ import { Logger } from '../helpers/logger';
 import { UserDatabase } from './v_1/controllers/user.database';
 import { AuthDatabase } from './v_1/controllers/auth.database';
 import { ChatDatabase } from './v_1/controllers/chat.database';
+import { AdminDatabase } from './v_1/controllers/admin.database';
 
 export class Db {
   // eslint-disable-next-line no-use-before-define
@@ -17,6 +18,7 @@ export class Db {
 
   public v1: {
     User: UserDatabase;
+    Admin: AdminDatabase;
     Auth: AuthDatabase;
     Chat: ChatDatabase;
   };
@@ -37,6 +39,7 @@ export class Db {
 
     this.v1 = {
       User: new UserDatabase(dbArgs),
+      Admin: new AdminDatabase(dbArgs),
       Auth: new AuthDatabase(dbArgs),
       Chat: new ChatDatabase(dbArgs),
     };

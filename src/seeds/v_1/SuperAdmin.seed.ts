@@ -1,35 +1,32 @@
 import { Db } from '../../database/db';
-import { User } from '../../helpers/entities';
 import { Logger } from '../../helpers/logger';
 import { hashPassword } from '../../helpers/hash';
+import { Entities } from '../../helpers';
 
-const user: Partial<User> = {
-  email: 'nile@vertifyanalytics.com',
-  password: 'vertifyAnalytics123',
-
-  name: 'Nile Berry',
-  profilePhoto:
-    'https://d2j141hl2t6y7e.cloudfront.net/profile-pictures/1729688528098-Screenshot_2024-10-23_at_6.01.51 PM.png',
+const admin: Partial<Entities.Admin> = {
+  email: 'admin@truefans.ng',
+  password: 'truefans@123',
+  name: 'Truefans Admin',
 };
 
 export async function superCompanyAndAdminSeed(db: Db) {
   Logger.info('Running super admin...');
 
   try {
-    if (!user.email || !user.password) throw new Error('Email and Password are required');
+    if (!admin.email || !admin.password) throw new Error('Email and Password are required');
 
-    const userExists = await db.v1.User.GetUserByEmail(user.email);
+    const userExists = await db.v1.Admin.GetAdmin({ email: admin.email });
 
     if (userExists) {
       Logger.info('Super admin already exists');
     } else {
       Logger.info('Creating super admin...');
 
-      const hashedPassword = await hashPassword(user.password);
+      const hashedPassword = await hashPassword(admin.password);
 
-      user.password = hashedPassword;
+      admin.password = hashedPassword;
 
-      await db.v1.User.CreateUser(user);
+      await db.v1.User.CreateUser(admin);
     }
   } catch (error) {
     Logger.error('Error running super admin seed', error);

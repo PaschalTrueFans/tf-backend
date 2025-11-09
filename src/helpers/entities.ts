@@ -26,6 +26,12 @@ export interface User extends DefaultTable {
   isVerified?: boolean;
 }
 
+export interface Admin extends DefaultTable {
+  email: string;
+  password: string;
+  name: string;
+}
+
 
 export interface verifyOtp {
   id: string;

@@ -21,16 +21,15 @@ export const jwtAdminAuth = async (
     const decoded: any = JWT.verify(token, Jwt.JWT_SECRET || '');
     if (decoded.isRefreshToken) return res.status(400).json({ Error: true, Msg: 'User Token Is Invalid or Expired! ' });
     const db = res.locals.db as Db;
-    const userData = await db.v1.User.GetUser({ id: decoded.id });
-    
+    const adminData = await db.v1.Admin.GetAdmin({ id: decoded.id });
 
-    if (!userData) return res.status(401).json({ Error: true, Msg: 'Invalid token' });
+    if (!adminData) return res.status(401).json({ Error: true, Msg: 'Invalid token' });
 
     req.userId = decoded.id;
 
     next();
   } catch (error) {
     Logger.Logger.error(error);
-    res.status(400).json({ Error: true, Msg: `User Token Is Invalid or Expired!4` });
+    res.status(400).json({ Error: true, Msg: `Admin Token Is Invalid or Expired!4` });
   }
 };

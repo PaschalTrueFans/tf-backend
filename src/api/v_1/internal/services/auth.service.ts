@@ -139,17 +139,17 @@ export class AuthService {
   public async GetLoginAdmin(admin: AuthModel.AdminLoginModel): Promise<AuthModel.Tokens> {
     Logger.info('AuthService.GetLoginAdmin', { admin });
 
-    const fetchedUser = await this.db.v1.User.GetUserByEmail(admin.email);
+    const fetchedAdmin = await this.db.v1.Admin.GetAdmin({ email: admin.email });
 
-    if (!fetchedUser) throw new AppError(400, 'Admin not found');
+    if (!fetchedAdmin) throw new AppError(400, 'Admin not found');
 
-    if (!fetchedUser.password) throw new AppError(500, 'No password found for admin');
+    if (!fetchedAdmin.password) throw new AppError(500, 'No password found for admin');
 
-    const isCorrectPassword = await Hash.verifyPassword(admin.password, fetchedUser.password);
+    const isCorrectPassword = await Hash.verifyPassword(admin.password, fetchedAdmin.password);
 
     if (!isCorrectPassword) throw new AppError(400, 'Invalid credentials');
 
-    const dataForToken = { adminId: fetchedUser.id!, types: JSON.stringify('Admin') };
+    const dataForToken = { id: fetchedAdmin.id! };
 
     const accessToken = Token.createAccessToken(dataForToken);
 
