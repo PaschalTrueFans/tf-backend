@@ -1902,4 +1902,135 @@ export class UserDatabase {
       throw new AppError(500, 'Error deleting verification token');
     }
   }
+
+  // Admin Dashboard Statistics Methods
+  async GetTotalUsersCount(): Promise<number> {
+    this.logger.info('Db.GetTotalUsersCount');
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('users').count('* as count');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetTotalUsersCount Error getting total users count', err);
+      throw new AppError(500, 'Error getting total users count');
+    }
+
+    if (!res || res.length === 0) {
+      return 0;
+    }
+
+    return parseInt(res[0].count, 10);
+  }
+
+  async GetRevenueStats(): Promise<{ allTime: number; currentMonth: number }> {
+    this.logger.info('Db.GetRevenueStats');
+
+    const knexdb = this.GetKnex();
+
+    // Get all-time revenue
+    const allTimeQuery = knexdb('transactions')
+      .where('status', 'succeeded')
+      .sum('amount as total');
+
+    const { res: allTimeRes, err: allTimeErr } = await this.RunQuery(allTimeQuery);
+
+    if (allTimeErr) {
+      this.logger.error('Db.GetRevenueStats Error getting all-time revenue', allTimeErr);
+      throw new AppError(500, 'Error getting all-time revenue');
+    }
+
+    const allTime = allTimeRes && allTimeRes[0]?.total ? parseFloat(allTimeRes[0].total) : 0;
+
+    // Get current month revenue
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const currentMonthQuery = knexdb('transactions')
+      .where('status', 'succeeded')
+      .where('processedAt', '>=', startOfMonth)
+      .sum('amount as total');
+
+    const { res: monthRes, err: monthErr } = await this.RunQuery(currentMonthQuery);
+
+    if (monthErr) {
+      this.logger.error('Db.GetRevenueStats Error getting current month revenue', monthErr);
+      throw new AppError(500, 'Error getting current month revenue');
+    }
+
+    const currentMonth = monthRes && monthRes[0]?.total ? parseFloat(monthRes[0].total) : 0;
+
+    return {
+      allTime,
+      currentMonth,
+    };
+  }
+
+  async GetNewSignupsStats(): Promise<{ today: number; thisWeek: number; thisMonth: number }> {
+    this.logger.info('Db.GetNewSignupsStats');
+
+    const knexdb = this.GetKnex();
+
+    // Today's signups
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const todayQuery = knexdb('users')
+      .where('createdAt', '>=', startOfToday)
+      .count('* as count');
+
+    const { res: todayRes, err: todayErr } = await this.RunQuery(todayQuery);
+
+    if (todayErr) {
+      this.logger.error('Db.GetNewSignupsStats Error getting today signups', todayErr);
+      throw new AppError(500, 'Error getting today signups');
+    }
+
+    const today = todayRes && todayRes[0]?.count ? parseInt(todayRes[0].count, 10) : 0;
+
+    // This week's signups (last 7 days)
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const weekQuery = knexdb('users')
+      .where('createdAt', '>=', startOfWeek)
+      .count('* as count');
+
+    const { res: weekRes, err: weekErr } = await this.RunQuery(weekQuery);
+
+    if (weekErr) {
+      this.logger.error('Db.GetNewSignupsStats Error getting this week signups', weekErr);
+      throw new AppError(500, 'Error getting this week signups');
+    }
+
+    const thisWeek = weekRes && weekRes[0]?.count ? parseInt(weekRes[0].count, 10) : 0;
+
+    // This month's signups
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const monthQuery = knexdb('users')
+      .where('createdAt', '>=', startOfMonth)
+      .count('* as count');
+
+    const { res: monthRes, err: monthErr } = await this.RunQuery(monthQuery);
+
+    if (monthErr) {
+      this.logger.error('Db.GetNewSignupsStats Error getting this month signups', monthErr);
+      throw new AppError(500, 'Error getting this month signups');
+    }
+
+    const thisMonth = monthRes && monthRes[0]?.count ? parseInt(monthRes[0].count, 10) : 0;
+
+    return {
+      today,
+      thisWeek,
+      thisMonth,
+    };
+  }
 }
