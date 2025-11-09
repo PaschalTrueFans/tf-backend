@@ -83,4 +83,31 @@ export class EmailService {
       throw error;
     }
   }
+
+  async SendPlainEmail(email: string, subject: string, message: string): Promise<void> {
+    try {
+      Logger.info('Sending plain email', { email, subject });
+
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; padding: 16px;">
+          <h2 style="margin-bottom: 12px;">${subject}</h2>
+          <p style="white-space: pre-wrap; line-height: 1.5;">${message}</p>
+          <p style="margin-top: 24px; color: #888; font-size: 12px;">Sent on ${new Date().toLocaleString()}</p>
+        </div>
+      `;
+
+      const info = await this.transporter.sendMail({
+        from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
+        to: email,
+        subject,
+        text: message,
+        html: htmlBody,
+      });
+
+      Logger.info('Plain email sent successfully:', info.messageId);
+    } catch (error) {
+      Logger.error('Error sending plain email:', error);
+      throw error;
+    }
+  }
 }

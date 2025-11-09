@@ -33,6 +33,34 @@ export interface Admin extends DefaultTable {
   name: string;
 }
 
+export type TicketStatus = 'open' | 'in_progress' | 'completed';
+
+export interface Ticket extends DefaultTable {
+  userId: string;
+  subject: string;
+  message: string;
+  status: TicketStatus;
+}
+
+export interface TicketComment extends DefaultTable {
+  ticketId: string;
+  adminId: string | null;
+  comment: string;
+}
+
+export interface SystemNotification extends DefaultTable {
+  title: string;
+  message: string;
+  adminId: string | null;
+}
+
+export interface EmailBroadcast extends DefaultTable {
+  subject: string;
+  message: string;
+  recipientCount: number;
+  adminId: string | null;
+}
+
 
 export interface verifyOtp {
   id: string;

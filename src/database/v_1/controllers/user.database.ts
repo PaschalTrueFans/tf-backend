@@ -86,6 +86,29 @@ export class UserDatabase {
     };
   }
 
+  async GetAllUserEmails(): Promise<string[]> {
+    this.logger.info('Db.GetAllUserEmails');
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('users').select('email').whereNotNull('email');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetAllUserEmails failed', err);
+      throw new AppError(400, 'Failed to fetch user emails');
+    }
+
+    const emails = (res ?? [])
+      .map((row) => row.email as string | null)
+      .filter((email): email is string => Boolean(email));
+
+    const uniqueEmails = Array.from(new Set(emails));
+
+    return uniqueEmails;
+  }
+
   async CreateUser(user: Partial<Entities.User>): Promise<string> {
     this.logger.info('Db.CreateUser', { user });
 
