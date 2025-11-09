@@ -26,7 +26,7 @@ export async function superCompanyAndAdminSeed(db: Db) {
 
       admin.password = hashedPassword;
 
-      await db.v1.User.CreateUser(admin);
+      await db.v1.Admin.CreateAdmin(admin);
     }
   } catch (error) {
     Logger.error('Error running super admin seed', error);

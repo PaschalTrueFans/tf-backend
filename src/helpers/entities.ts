@@ -24,6 +24,7 @@ export interface User extends DefaultTable {
   tags?: string[];
   categoryId?: string;
   isVerified?: boolean;
+  isBlocked: boolean;
 }
 
 export interface Admin extends DefaultTable {

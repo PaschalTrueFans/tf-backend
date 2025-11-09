@@ -38,6 +38,28 @@ export class AdminDatabase {
 
     return res[0] as Entities.Admin;
   }
+
+  async CreateAdmin(admin: Partial<Entities.Admin>): Promise<Entities.Admin> {
+    this.logger.info('Db.CreateAdmin', { admin });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('admin').insert(admin);
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CreateAdmin failed', err);
+      throw new AppError(400, 'Admin not created');
+    }
+
+    if (!res || res.length === 0) {
+      this.logger.info('Db.CreateAdmin Admin not created');
+      throw new AppError(400, 'Admin not created');
+    }
+
+    return res[0] as Entities.Admin;
+  }
 }
 
 

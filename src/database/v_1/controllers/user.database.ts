@@ -23,6 +23,69 @@ export class UserDatabase {
     this.RunQuery = args.RunQuery;
   }
 
+  async GetUsersWithFilters(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    role?: 'creator' | 'member';
+    isBlocked?: boolean;
+  }): Promise<{ users: Entities.User[]; total: number }> {
+    const { page = 1, limit = 10, search, role, isBlocked } = params;
+
+    this.logger.info('Db.GetUsersWithFilters', { page, limit, search, role, isBlocked });
+
+    const knexdb = this.GetKnex();
+    const baseQuery = knexdb<Entities.User>('users');
+
+    if (search) {
+      baseQuery.andWhere(function () {
+        this.whereILike('name', `%${search}%`).orWhereILike('email', `%${search}%`);
+      });
+    }
+
+    if (role === 'creator') {
+      baseQuery.whereNotNull('pageName');
+    } else if (role === 'member') {
+      baseQuery.whereNull('pageName');
+    }
+
+    if (isBlocked) {
+      baseQuery.andWhere('isBlocked', true);
+    } else  {
+      baseQuery.andWhere('isBlocked', false);
+    }
+
+    const paginatedQuery = baseQuery
+      .clone()
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .offset((page - 1) * limit);
+
+    const countQuery = baseQuery.clone().clearSelect().count('id as total');
+
+    const [{ res: usersRes, err: usersErr }, { res: countRes, err: countErr }] = await Promise.all([
+      this.RunQuery(paginatedQuery),
+      this.RunQuery(countQuery),
+    ]);
+
+    if (usersErr) {
+      this.logger.error('Db.GetUsersWithFilters failed fetching users', usersErr);
+      throw new AppError(400, 'Failed to fetch users');
+    }
+
+    if (countErr) {
+      this.logger.error('Db.GetUsersWithFilters failed counting users', countErr);
+      throw new AppError(400, 'Failed to fetch users count');
+    }
+
+    const total = parseInt(countRes?.[0]?.total ?? '0', 10);
+
+    return {
+      users: (usersRes ?? []) as Entities.User[],
+      total,
+    };
+  }
+
   async CreateUser(user: Partial<Entities.User>): Promise<string> {
     this.logger.info('Db.CreateUser', { user });
 

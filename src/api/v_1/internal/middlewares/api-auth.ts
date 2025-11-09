@@ -24,11 +24,8 @@ export const jwtAuth = async (
     const userData = await db.v1.User.GetUser({ id: decoded.id });
 
     if (!userData) return res.status(401).json({ Error: true, Msg: 'Invalid token' });
+    if(userData.isBlocked) return res.status(401).json({ Error: true, Msg: 'Unable to process this request , Please contact support' });
 
-    if (!all) {
-      // Skip user type checking since we removed UserTypes
-      // if (!userTypeToCheck.includes(Usertype)) return res.status(401).json({ Error: true, Msg: 'Unauthorized' });
-    }
     req.userId = decoded.id;
 
     next();
