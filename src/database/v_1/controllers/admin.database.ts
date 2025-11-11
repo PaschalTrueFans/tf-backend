@@ -763,5 +763,97 @@ export class AdminDatabase {
       total,
     };
   }
+
+  async GetSettings(): Promise<{
+    id: string;
+    platformFee: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null> {
+    this.logger.info('Db.GetSettings');
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('settings').orderBy('createdAt', 'desc').limit(1);
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSettings failed', err);
+      throw new AppError(400, 'Failed to fetch settings');
+    }
+
+    if (!res || res.length === 0) {
+      return null;
+    }
+
+    return res[0] as {
+      id: string;
+      platformFee: string;
+      createdAt: string;
+      updatedAt: string;
+    };
+  }
+
+  async UpdateSettings(platformFee: string): Promise<{
+    id: string;
+    platformFee: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    this.logger.info('Db.UpdateSettings', { platformFee });
+
+    const knexdb = this.GetKnex();
+
+    // Check if settings exist
+    const existingSettings = await this.GetSettings();
+
+    if (existingSettings) {
+      // Update existing settings
+      const updateQuery = knexdb('settings')
+        .where({ id: existingSettings.id })
+        .update({ platformFee, updatedAt: knexdb.fn.now() })
+        .returning('*');
+
+      const { res, err } = await this.RunQuery(updateQuery);
+
+      if (err) {
+        this.logger.error('Db.UpdateSettings failed', err);
+        throw new AppError(400, 'Failed to update settings');
+      }
+
+      if (!res || res.length === 0) {
+        throw new AppError(400, 'Failed to update settings');
+      }
+
+      return res[0] as {
+        id: string;
+        platformFee: string;
+        createdAt: string;
+        updatedAt: string;
+      };
+    } else {
+      // Create new settings if none exist
+      const insertQuery = knexdb('settings').insert({ platformFee }, ['*']);
+
+      const { res, err } = await this.RunQuery(insertQuery);
+
+      if (err) {
+        this.logger.error('Db.UpdateSettings failed creating settings', err);
+        throw new AppError(400, 'Failed to create settings');
+      }
+
+      if (!res || res.length === 0) {
+        throw new AppError(400, 'Failed to create settings');
+      }
+
+      return res[0] as {
+        id: string;
+        platformFee: string;
+        createdAt: string;
+        updatedAt: string;
+      };
+    }
+  }
 }
 

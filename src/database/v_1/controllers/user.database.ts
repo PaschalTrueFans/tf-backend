@@ -51,8 +51,6 @@ export class UserDatabase {
 
     if (isBlocked) {
       baseQuery.andWhere('isBlocked', true);
-    } else  {
-      baseQuery.andWhere('isBlocked', false);
     }
 
     const paginatedQuery = baseQuery
@@ -107,6 +105,27 @@ export class UserDatabase {
     const uniqueEmails = Array.from(new Set(emails));
 
     return uniqueEmails;
+  }
+
+  async GetAllUserIds(): Promise<string[]> {
+    this.logger.info('Db.GetAllUserIds');
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('users').select('id');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetAllUserIds failed', err);
+      throw new AppError(400, 'Failed to fetch user IDs');
+    }
+
+    const userIds = (res ?? [])
+      .map((row) => row.id as string | null)
+      .filter((id): id is string => Boolean(id));
+
+    return userIds;
   }
 
   async CreateUser(user: Partial<Entities.User>): Promise<string> {

@@ -2,6 +2,7 @@ import { Db } from '../../../../database/db';
 import { Logger } from '../../../../helpers/logger';
 import { EmailService } from '../../../../helpers/email';
 import { AppError } from '../../../../helpers/errors';
+import { Entities } from '../../../../helpers';
 import * as AdminModel from '../models/admin.model';
 
 export class AdminService {
@@ -357,6 +358,58 @@ export class AdminService {
         throw new AppError(400, 'Failed to fetch created notification');
       }
 
+      // Send notifications to all users in batches to avoid connection pool exhaustion
+      try {
+        const userIds = await this.db.v1.User.GetAllUserIds();
+        
+        // Use adminId as fromUserId, or use a system user ID if adminId is null
+        const adminUser = await this.db.v1.User.GetUserByEmail('admin@truefans.ng');
+        const fromUserId = adminUser?.id || userIds[0] || ''; // Fallback to first user if no admin
+        
+        // Process notifications in batches to avoid overwhelming the database connection pool
+        const BATCH_SIZE = 50; // Process 50 notifications at a time
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+          const batch = userIds.slice(i, i + BATCH_SIZE);
+          
+          const batchPromises = batch.map(async (userId) => {
+            const notification: Partial<Entities.Notification> = {
+              userId,
+              title: created.title,
+              message: created.message,
+              redirectUrl: '/notifications',
+              fromUserId,
+              type: 'member',
+              isRead: false,
+            };
+            
+            return this.db.v1.User.CreateNotification(notification);
+          });
+
+          // Process batch and count results
+          const batchResults = await Promise.allSettled(batchPromises);
+          batchResults.forEach((result) => {
+            if (result.status === 'fulfilled') {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          });
+        }
+        
+        Logger.info('AdminService.CreateSystemNotification - Notifications sent', {
+          systemNotificationId: id,
+          totalUsers: userIds.length,
+          successCount,
+          errorCount,
+        });
+      } catch (error) {
+        // Log error but don't fail the system notification creation
+        Logger.error('AdminService.CreateSystemNotification - Failed to send notifications', error);
+      }
+
       return {
         id: created.id,
         title: created.title,
@@ -539,6 +592,58 @@ export class AdminService {
       };
     } catch (error) {
       Logger.error('AdminService.CreateEmailBroadcast Error', error);
+      throw error;
+    }
+  }
+
+  async GetSettings(): Promise<{
+    id: string;
+    platformFee: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    try {
+      Logger.info('AdminService.GetSettings');
+
+      const settings = await this.db.v1.Admin.GetSettings();
+
+      if (!settings) {
+        // Return default settings if none exist
+        return {
+          id: '',
+          platformFee: '0',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      return settings;
+    } catch (error) {
+      Logger.error('AdminService.GetSettings Error', error);
+      throw error;
+    }
+  }
+
+  async UpdateSettings(platformFee: string): Promise<{
+    id: string;
+    platformFee: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    try {
+      Logger.info('AdminService.UpdateSettings', { platformFee });
+
+      // Validate platformFee
+      const feeNumber = parseFloat(platformFee);
+      if (isNaN(feeNumber) || feeNumber < 0 || feeNumber > 100) {
+        throw new AppError(400, 'Platform fee must be a number between 0 and 100');
+      }
+
+      const updatedSettings = await this.db.v1.Admin.UpdateSettings(platformFee);
+
+      return updatedSettings;
+    } catch (error) {
+      Logger.error('AdminService.UpdateSettings Error', error);
       throw error;
     }
   }

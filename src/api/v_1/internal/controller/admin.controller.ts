@@ -308,5 +308,44 @@ export class AdminController {
 
     res.status(201).json(body);
   };
+
+  public getSettings = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      const response = await service.GetSettings();
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  public updateSettings = async (
+    req: RequestBody<{ platformFee: string }>,
+    res: Response,
+  ): Promise<void> => {
+    let body;
+    try {
+      const { platformFee } = req.body ?? {};
+
+      if (!platformFee || typeof platformFee !== 'string') {
+        throw new AppError(400, 'platformFee is required and must be a string');
+      }
+
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      const response = await service.UpdateSettings(platformFee);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
 }
 

@@ -22,6 +22,8 @@ router.put('/system-notifications/:notificationId', adminController.updateSystem
 router.delete('/system-notifications/:notificationId', adminController.deleteSystemNotification);
 router.get('/email-broadcasts', adminController.getEmailBroadcasts);
 router.post('/email-broadcasts', adminController.createEmailBroadcast);
+router.get('/settings', adminController.getSettings);
+router.put('/settings', adminController.updateSettings);
 
 export { router as adminRoutes };
 

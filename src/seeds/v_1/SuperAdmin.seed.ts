@@ -19,6 +19,17 @@ export async function superCompanyAndAdminSeed(db: Db) {
 
     if (userExists) {
       Logger.info('Super admin already exists');
+      const user = await db.v1.User.GetUserByEmail(userExists.email);
+      const hashedPassword = await hashPassword(admin.password);
+      if(!user) {
+        await db.v1.User.CreateUser({
+         id: userExists.id,
+         email: userExists.email,
+         password: hashedPassword,
+         name: userExists.name || 'Truefans Admin',
+        });
+      }
+      Logger.info('user admin created' , user);
     } else {
       Logger.info('Creating super admin...');
 
@@ -26,7 +37,21 @@ export async function superCompanyAndAdminSeed(db: Db) {
 
       admin.password = hashedPassword;
 
-      await db.v1.Admin.CreateAdmin(admin);
+     const adminCreated = await db.v1.Admin.CreateAdmin(admin);
+
+     if(adminCreated.id) {
+
+     const user = await db.v1.User.GetUserByEmail(adminCreated.email);
+     if(!user) {
+       const newUser = await db.v1.User.CreateUser({
+        id: adminCreated.id,
+        email: adminCreated.email,
+        password: hashedPassword,
+        name: adminCreated.name,
+       });
+     }
+    Logger.info('user admin created' , user);
+    }
     }
   } catch (error) {
     Logger.error('Error running super admin seed', error);
