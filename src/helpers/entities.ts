@@ -121,6 +121,8 @@ export interface Membership extends DefaultTable {
   price: string;
   currency: string;
   description?: string;
+  stripeProductId?: string;
+  stripePriceId?: string;
 }
 
 export interface Product extends DefaultTable {

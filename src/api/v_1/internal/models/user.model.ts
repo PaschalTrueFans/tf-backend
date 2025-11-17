@@ -89,6 +89,15 @@ export const UpdateMembershipBodySchema = z.object({
 
 export type UpdateMembershipBody = z.infer<typeof UpdateMembershipBodySchema>;
 
+// Stripe checkout session schema
+export const CreateCheckoutSessionBodySchema = z.object({
+  membershipId: z.string().uuid('Invalid membership ID'),
+  successUrl: z.string().url('Invalid success URL'),
+  cancelUrl: z.string().url('Invalid cancel URL'),
+});
+
+export type CreateCheckoutSessionBody = z.infer<typeof CreateCheckoutSessionBodySchema>;
+
 // Membership response interface
 export interface MembershipResponse extends DefaultTable {
   creatorId: string;

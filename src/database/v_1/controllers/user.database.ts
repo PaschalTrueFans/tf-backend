@@ -1517,6 +1517,87 @@ export class UserDatabase {
     }
   }
 
+  async GetSubscriptionByUserAndCreator(userId: string, creatorId: string): Promise<Entities.Subscription | null> {
+    this.logger.info('Db.GetSubscriptionByUserAndCreator', { userId, creatorId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('subscriberId', userId)
+      .where('creatorId', creatorId)
+      .first();
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSubscriptionByUserAndCreator failed', err);
+      throw new AppError(400, 'Failed to get subscription');
+    }
+
+    return res?.[0] || null;
+  }
+
+  async UpdateSubscriptionByStripeId(stripeSubscriptionId: string, updateData: any): Promise<void> {
+    this.logger.info('Db.UpdateSubscriptionByStripeId', { stripeSubscriptionId, updateData });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('stripeSubscriptionId', stripeSubscriptionId)
+      .update(updateData);
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateSubscriptionByStripeId failed', err);
+      throw new AppError(400, 'Failed to update subscription');
+    }
+  }
+
+  async GetSubscriptionByStripeId(stripeSubscriptionId: string): Promise<Entities.Subscription | null> {
+    this.logger.info('Db.GetSubscriptionByStripeId', { stripeSubscriptionId });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('subscriptions')
+      .where('stripeSubscriptionId', stripeSubscriptionId)
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetSubscriptionByStripeId failed', err);
+      throw new AppError(400, 'Failed to get subscription');
+    }
+
+    if (!res) {
+      return null;
+    }
+
+    return res[0];
+  }
+
+  async CreateTransaction(transaction: Partial<Entities.Transaction>): Promise<string> {
+    this.logger.info('Db.CreateTransaction', { transaction });
+
+    const knexdb = this.GetKnex();
+
+    const query = knexdb('transactions').insert(transaction, 'id');
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CreateTransaction failed', err);
+      throw new AppError(400, 'Failed to create transaction');
+    }
+
+    if (!res || res.length !== 1) {
+      throw new AppError(400, 'Transaction not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
   async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
     this.logger.info('Db.GetAllPaidPostsByMembershipCreators', { userId, page, limit });
 

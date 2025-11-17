@@ -72,6 +72,9 @@ router.post('/subscribe', userController.subscribeToCreator);
 router.post('/un-subscribe', userController.unSubscribeToCreator);
 router.get('/subscriptions', userController.getUserSubscriptions);
 router.get('/creators/:creatorId/subscribers', userController.getCreatorSubscribers);
+
+// Stripe checkout session
+router.post('/checkout-session', userController.createCheckoutSession);
 router.post('/subscriptions/:subscriptionId/cancel', userController.cancelSubscription);
 
 // Insights routes

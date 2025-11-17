@@ -9,6 +9,7 @@ import { authRoutes } from './auth.routes';
 import { userRoutes } from './user.routes';
 import { chatRoutes } from './chat.routes';
 import { adminRoutes } from './admin.routes';
+import webhookRoutes from './webhook.routes';
 
 export class ApiRouter {
   public router: express.Router;
@@ -23,6 +24,8 @@ export class ApiRouter {
 
   private InitMiddleWares(): void {
     this.router.use(cors(internalOptions));
+    // Webhook routes need raw body, so they come before JSON parsing
+    this.router.use('/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
     this.router.use(express.json({ limit: '200mb' }));
     this.router.use(fileUpload());
   }

@@ -1,7 +1,7 @@
 import { Db } from '../../../../database/db';
 import { AppError, BadRequest } from '../../../../helpers/errors';
 import { Logger } from '../../../../helpers/logger';
-import { Entities, Hash } from '../../../../helpers';
+import { Entities, Hash, stripeService } from '../../../../helpers';
 import * as PostModel from '../models/post.model';
 import * as UserModels from '../models/user.model';
 import * as AuthModel from '../models/auth.model';
@@ -657,16 +657,45 @@ export class UserService {
       throw new BadRequest('You do not have permission for this action. Only creators can create memberships.');
     }
 
-    const membership: Partial<Entities.Membership> = {
-      creatorId,
-      name: body.name,
-      price: body.price,
-      currency: body.currency || 'NGN',
-      description: body.description,
-    };
+    try {
+      // Create Stripe product
+      const stripeProduct = await stripeService.createProduct(
+        `${creator.pageName} - ${body.name}`,
+        body.description || `Membership subscription for ${creator.pageName}`
+      );
 
-    const id = await this.db.v1.User.CreateMembership(membership);
-    return id;
+      // Create Stripe price (convert price to number and handle currency)
+      const priceAmount = parseFloat(body.price);
+      const currency = body.currency?.toLowerCase() || 'ngn';
+      
+      const stripePrice = await stripeService.createPrice(
+        stripeProduct.id,
+        priceAmount,
+        currency
+      );
+
+      const membership: Partial<Entities.Membership> = {
+        creatorId,
+        name: body.name,
+        price: body.price,
+        currency: body.currency || 'NGN',
+        description: body.description,
+        stripeProductId: stripeProduct.id,
+        stripePriceId: stripePrice.id,
+      };
+
+      const id = await this.db.v1.User.CreateMembership(membership);
+      Logger.info('UserService.CreateMembership success', { 
+        membershipId: id, 
+        stripeProductId: stripeProduct.id, 
+        stripePriceId: stripePrice.id 
+      });
+      
+      return id;
+    } catch (error) {
+      Logger.error('UserService.CreateMembership failed', error);
+      throw new AppError(500, 'Failed to create membership with Stripe integration');
+    }
   }
 
   public async GetMembershipsByCreator(creatorId: string): Promise<Entities.Membership[]> {
@@ -1394,5 +1423,209 @@ export class UserService {
 
     // Delete the verification token after successful verification
     await this.db.v1.User.DeleteVerificationToken(token);
+  }
+
+  // Stripe checkout session for subscriptions
+  public async CreateCheckoutSession(
+    userId: string, 
+    membershipId: string, 
+    successUrl: string, 
+    cancelUrl: string
+  ): Promise<{ sessionId: string; url: string }> {
+    Logger.info('UserService.CreateCheckoutSession', { userId, membershipId, successUrl, cancelUrl });
+
+    // Get membership details
+    const membership = await this.db.v1.User.GetMembershipById(membershipId);
+    if (!membership) {
+      throw new BadRequest('Membership not found');
+    }
+
+    if (!membership.stripePriceId) {
+      throw new BadRequest('Membership does not have Stripe integration configured');
+    }
+
+    // Get user details for customer email
+    const user = await this.db.v1.User.GetUser({ id: userId });
+    if (!user) {
+      throw new BadRequest('User not found');
+    }
+
+    // Check if user is already subscribed to this creator
+    const existingSubscription = await this.db.v1.User.GetSubscriptionByUserAndCreator(userId, membership.creatorId);
+    if (existingSubscription && existingSubscription.isActive) {
+      throw new BadRequest('You are already subscribed to this creator');
+    }
+
+    try {
+      // Create Stripe checkout session
+      const session = await stripeService.createCheckoutSession(
+        membership.stripePriceId,
+        successUrl,
+        cancelUrl,
+        user.email,
+        {
+          userId,
+          membershipId,
+          creatorId: membership.creatorId,
+        }
+      );
+
+      Logger.info('UserService.CreateCheckoutSession success', { sessionId: session.id });
+
+      return {
+        sessionId: session.id,
+        url: session.url || '',
+      };
+    } catch (error) {
+      Logger.error('UserService.CreateCheckoutSession failed', error);
+      throw new AppError(500, 'Failed to create checkout session');
+    }
+  }
+
+  // Stripe webhook handlers
+  public async CreateSubscriptionFromStripe(subscriptionData: {
+    subscriberId: string;
+    creatorId: string;
+    membershipId: string;
+    stripeSubscriptionId: string;
+    stripeCustomerId: string;
+    subscriptionStatus: string;
+    startedAt: Date;
+  }): Promise<void> {
+    Logger.info('UserService.CreateSubscriptionFromStripe', subscriptionData);
+
+    try {
+      const subscription: Partial<Entities.Subscription> = {
+        subscriberId: subscriptionData.subscriberId,
+        creatorId: subscriptionData.creatorId,
+        membershipId: subscriptionData.membershipId,
+        stripeSubscriptionId: subscriptionData.stripeSubscriptionId,
+        stripeCustomerId: subscriptionData.stripeCustomerId,
+        subscriptionStatus: subscriptionData.subscriptionStatus as Entities.Subscription['subscriptionStatus'],
+        isActive: subscriptionData.subscriptionStatus === 'active',
+        startedAt: subscriptionData.startedAt.toISOString(),
+      };
+
+      await this.db.v1.User.CreateSubscription(subscription);
+      Logger.info('Subscription created from Stripe webhook', { 
+        subscriptionId: subscriptionData.stripeSubscriptionId 
+      });
+    } catch (error) {
+      Logger.error('UserService.CreateSubscriptionFromStripe failed', error);
+      throw error;
+    }
+  }
+
+  public async UpdateSubscriptionStatus(
+    stripeSubscriptionId: string, 
+    status: string, 
+    canceledAt?: Date
+  ): Promise<void> {
+    Logger.info('UserService.UpdateSubscriptionStatus', { 
+      stripeSubscriptionId, 
+      status, 
+      canceledAt 
+    });
+
+    try {
+      const updateData: any = {
+        subscriptionStatus: status,
+        isActive: status === 'active',
+        updatedAt: new Date(),
+      };
+
+      if (canceledAt) {
+        updateData.canceledAt = canceledAt;
+        updateData.isActive = false;
+      }
+
+      await this.db.v1.User.UpdateSubscriptionByStripeId(stripeSubscriptionId, updateData);
+      Logger.info('Subscription status updated', { stripeSubscriptionId, status });
+    } catch (error) {
+      Logger.error('UserService.UpdateSubscriptionStatus failed', error);
+      throw error;
+    }
+  }
+
+  public async CreateTransactionFromInvoice(
+    invoice: any,
+    stripeSubscriptionId: string
+  ): Promise<void> {
+    Logger.info('UserService.CreateTransactionFromInvoice', { 
+      invoiceId: invoice.id, 
+      stripeSubscriptionId 
+    });
+
+    try {
+      // Get subscription from database
+      const subscription = await this.db.v1.User.GetSubscriptionByStripeId(stripeSubscriptionId);
+      
+      if (!subscription) {
+        Logger.error('Subscription not found for Stripe subscription ID', { stripeSubscriptionId });
+        throw new AppError(404, 'Subscription not found');
+      }
+
+      // Extract invoice data
+      const amount = invoice.amount_paid / 100; // Convert from cents to dollars
+      const currency = invoice.currency.toUpperCase();
+      const fee = invoice.application_fee_amount ? invoice.application_fee_amount / 100 : null;
+      const netAmount = invoice.amount_paid ? (invoice.amount_paid - (invoice.application_fee_amount || 0)) / 100 : null;
+
+      // Get payment intent and charge IDs
+      const paymentIntentId = typeof invoice.payment_intent === 'string' 
+        ? invoice.payment_intent 
+        : invoice.payment_intent?.id || null;
+      
+      const chargeId = invoice.charge as string || null;
+      const customerId = typeof invoice.customer === 'string' 
+        ? invoice.customer 
+        : invoice.customer?.id || null;
+
+      // Get billing period from invoice
+      const billingPeriodStart = invoice.period_start 
+        ? new Date(invoice.period_start * 1000) 
+        : null;
+      const billingPeriodEnd = invoice.period_end 
+        ? new Date(invoice.period_end * 1000) 
+        : null;
+
+      // Create transaction record
+      const transaction: Partial<Entities.Transaction> = {
+        subscriptionId: subscription.id,
+        subscriberId: subscription.subscriberId,
+        creatorId: subscription.creatorId,
+        stripePaymentIntentId: paymentIntentId || undefined,
+        stripeChargeId: chargeId || undefined,
+        stripeInvoiceId: invoice.id,
+        stripeCustomerId: customerId || undefined,
+        transactionType: 'subscription',
+        status: invoice.paid ? 'succeeded' : 'failed',
+        amount,
+        currency,
+        fee: fee ?? undefined,
+        netAmount: netAmount ?? undefined,
+        billingPeriodStart: billingPeriodStart ? billingPeriodStart.toISOString() : undefined,
+        billingPeriodEnd: billingPeriodEnd ? billingPeriodEnd.toISOString() : undefined,
+        processedAt: invoice.status_transitions?.paid_at
+          ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
+          : new Date().toISOString(),
+        description: invoice.description || `Subscription payment for invoice ${invoice.number || invoice.id}`,
+        receiptUrl: invoice.hosted_invoice_url || undefined,
+        metadata: {
+          invoiceNumber: invoice.number,
+          invoiceStatus: invoice.status,
+          attemptCount: invoice.attempt_count,
+        },
+      };
+
+      await this.db.v1.User.CreateTransaction(transaction);
+      Logger.info('Transaction created from invoice', { 
+        transactionId: invoice.id, 
+        subscriptionId: subscription.id 
+      });
+    } catch (error) {
+      Logger.error('UserService.CreateTransactionFromInvoice failed', error);
+      throw error;
+    }
   }
 }

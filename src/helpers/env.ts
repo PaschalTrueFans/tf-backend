@@ -62,6 +62,12 @@ export const SMTP = {
   SECURE: process.env.SMTP_SECURE === 'true' || false, // true for 465, false for 587
 };
 
+export const Stripe = {
+  SECRET_KEY: process.env.STRIPE_SECRET_KEY as string,
+  PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY as string,
+  WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET as string,
+};
+
 export const ENV = {
   Server,
   Jwt,
@@ -70,4 +76,5 @@ export const ENV = {
   Swagger,
   AWS,
   FrontEndLink,
+  Stripe,
 };

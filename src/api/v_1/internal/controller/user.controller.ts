@@ -1045,4 +1045,27 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Stripe checkout session for subscriptions
+  public createCheckoutSession = async (req: RequestBody<UserModel.CreateCheckoutSessionBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.CreateCheckoutSessionBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      
+      const { membershipId, successUrl, cancelUrl } = req.body;
+      const session = await service.CreateCheckoutSession(userId, membershipId, successUrl, cancelUrl);
+      
+      body = { 
+        data: session,
+        message: 'Checkout session created successfully' 
+      };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
 }
