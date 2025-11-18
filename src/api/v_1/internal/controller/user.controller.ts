@@ -1068,4 +1068,43 @@ export class UserController {
     }
     res.json(body);
   };
+
+  public createProductCheckoutSession = async (req: RequestBody<UserModel.CreateProductCheckoutSessionBody>, res: Response): Promise<void> => {
+    let body;
+    try {
+      await UserModel.CreateProductCheckoutSessionBodySchema.parseAsync(req.body);
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      
+      const { productId, successUrl, cancelUrl } = req.body;
+      const session = await service.CreateProductCheckoutSession(userId, productId, successUrl, cancelUrl);
+      
+      body = { 
+        data: session,
+        message: 'Product checkout session created successfully' 
+      };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  public checkProductPurchase = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const productId = req.params.productId;
+      
+      const hasPurchased = await service.HasUserPurchasedProduct(userId, productId);
+      body = { data: { hasPurchased } };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
 }

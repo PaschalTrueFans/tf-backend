@@ -1598,6 +1598,79 @@ export class UserDatabase {
     return id;
   }
 
+  // Product Purchase methods
+  async CreateProductPurchase(purchase: Partial<Entities.ProductPurchase>): Promise<string> {
+    this.logger.info('Db.CreateProductPurchase', { purchase });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('product_purchases').insert(purchase, 'id');
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.CreateProductPurchase failed', err);
+      throw new AppError(400, 'Product purchase not created');
+    }
+
+    if (!res || res.length !== 1) {
+      this.logger.info('Db.CreateProductPurchase Purchase not created', err);
+      throw new AppError(400, 'Product purchase not created');
+    }
+
+    const { id } = res[0];
+    return id;
+  }
+
+  async GetProductPurchaseByUserAndProduct(userId: string, productId: string): Promise<Entities.ProductPurchase | null> {
+    this.logger.info('Db.GetProductPurchaseByUserAndProduct', { userId, productId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('product_purchases')
+      .where({ userId, productId })
+      .where('status', 'completed')
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetProductPurchaseByUserAndProduct failed', err);
+      throw new AppError(500, 'Error getting product purchase');
+    }
+
+    return res?.[0] || null;
+  }
+
+  async GetProductPurchaseByCheckoutSession(checkoutSessionId: string): Promise<Entities.ProductPurchase | null> {
+    this.logger.info('Db.GetProductPurchaseByCheckoutSession', { checkoutSessionId });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('product_purchases')
+      .where({ stripeCheckoutSessionId: checkoutSessionId })
+
+    const { res, err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.GetProductPurchaseByCheckoutSession failed', err);
+      throw new AppError(500, 'Error getting product purchase');
+    }
+
+    return res?.[0] || null;
+  }
+
+  async UpdateProductPurchase(purchaseId: string, updateData: Partial<Entities.ProductPurchase>): Promise<void> {
+    this.logger.info('Db.UpdateProductPurchase', { purchaseId, updateData });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('product_purchases')
+      .where({ id: purchaseId })
+      .update(updateData);
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateProductPurchase failed', err);
+      throw new AppError(400, 'Failed to update product purchase');
+    }
+  }
+
   async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
     this.logger.info('Db.GetAllPaidPostsByMembershipCreators', { userId, page, limit });
 

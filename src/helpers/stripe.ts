@@ -40,7 +40,7 @@ class StripeService {
   }
 
   /**
-   * Create a Stripe price for a product
+   * Create a Stripe price for a product (recurring subscription)
    */
   async createPrice(
     productId: string,
@@ -63,6 +63,32 @@ class StripeService {
       return price;
     } catch (error) {
       Logger.error('StripeService.createPrice failed', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a one-time Stripe price for a product (non-recurring)
+   */
+  async createOneTimePrice(
+    productId: string,
+    amount: number,
+    currency: string = 'ngn'
+  ): Promise<Stripe.Price> {
+    try {
+      Logger.info('StripeService.createOneTimePrice', { productId, amount, currency });
+      
+      const price = await this.getStripe().prices.create({
+        product: productId,
+        unit_amount: Math.round(amount * 100), // Convert to cents
+        currency: currency.toLowerCase(),
+        // No recurring field = one-time payment
+      });
+
+      Logger.info('StripeService.createOneTimePrice success', { priceId: price.id });
+      return price;
+    } catch (error) {
+      Logger.error('StripeService.createOneTimePrice failed', error);
       throw error;
     }
   }
@@ -110,6 +136,53 @@ class StripeService {
       return session;
     } catch (error) {
       Logger.error('StripeService.createCheckoutSession failed', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a checkout session for one-time payment (product purchase)
+   */
+  async createPaymentCheckoutSession(
+    priceId: string,
+    successUrl: string,
+    cancelUrl: string,
+    customerEmail?: string,
+    metadata?: Record<string, string>
+  ): Promise<Stripe.Checkout.Session> {
+    try {
+      Logger.info('StripeService.createPaymentCheckoutSession', { 
+        priceId, 
+        successUrl, 
+        cancelUrl, 
+        customerEmail,
+        metadata 
+      });
+
+      const sessionParams: Stripe.Checkout.SessionCreateParams = {
+        mode: 'payment', // One-time payment instead of subscription
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: metadata || {},
+      };
+
+      if (customerEmail) {
+        sessionParams.customer_email = customerEmail;
+      }
+
+      const session = await this.getStripe().checkout.sessions.create(sessionParams);
+
+      Logger.info('StripeService.createPaymentCheckoutSession success', { sessionId: session.id });
+      return session;
+    } catch (error) {
+      Logger.error('StripeService.createPaymentCheckoutSession failed', error);
       throw error;
     }
   }

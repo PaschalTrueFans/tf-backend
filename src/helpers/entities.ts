@@ -131,6 +131,8 @@ export interface Product extends DefaultTable {
   description?: string;
   mediaUrl?: string;
   price: string;
+  stripeProductId?: string;
+  stripePriceId?: string;
 }
 
 export interface Event extends DefaultTable {
@@ -158,7 +160,8 @@ export interface Subscription extends DefaultTable {
 }
 
 export interface Transaction extends DefaultTable {
-  subscriptionId: string;
+  subscriptionId?: string; // Nullable for product purchases
+  productId?: string; // For product purchases
   subscriberId: string;
   creatorId: string;
   stripePaymentIntentId?: string;
@@ -184,6 +187,20 @@ export interface Transaction extends DefaultTable {
   metadata?: any;
   description?: string;
   receiptUrl?: string;
+}
+
+export interface ProductPurchase extends DefaultTable {
+  userId: string;
+  productId: string;
+  creatorId: string;
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  stripeCustomerId?: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  purchasedAt?: string;
 }
 
 export interface Conversation extends DefaultTable {

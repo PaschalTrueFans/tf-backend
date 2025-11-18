@@ -228,54 +228,27 @@ export class UserService {
       })),
       products: products,
       events: events,
-      // exploreOthers: [
-      //   {
-      //     id:  '1',
-      //     title:  'Title 1',
-      //     createdAt: new Date().toISOString(),
-      //     public:  true,
-      //     totalLikes:  10,
-      //     totalComments: 10,
-      //   },
-      //   {
-      //     id: '2',
-      //     title: 'Title 2',
-      //     public:  false,
-      //     createdAt:  new Date().toISOString(),
-      //     totalLikes:  15,
-      //     totalComments:  15,
-      //   },
-      //   {
-      //     id:  '3',
-      //     title:  'Title 3',
-      //     createdAt: new Date().toISOString(),
-      //     public:  true,
-      //     totalLikes:  10,
-      //     totalComments: 10,
-      //   },
-      //   {
-      //     id: '4',
-      //     title: 'Title 4',
-      //     public:  false,
-      //     createdAt:  new Date().toISOString(),
-      //     totalLikes:  15,
-      //     totalComments:  15,
-      //   },
-      
-      // ]
+     
     }
   }
 
-  public async GetCreatorByPageName(pageName: string, currentUserId?: string): Promise<UserModels.CreatorProfile | null | any> {
+  public async GetCreatorByPageName(pageName: string, currentUserId: string): Promise<UserModels.CreatorProfile | null | any> {
     Logger.info('UserService.GetCreatorByPageName', { pageName, currentUserId });
 
-    const creator = await this.db.v1.User.GetCreatorByPageNameWithFollowStatus(pageName, currentUserId);
-    const recentPosts = await this.db.v1.User.GetRecentPostsByCreator(creator.id);
-    const followersCount = await this.db.v1.User.GetTotalFollowers(creator.id);
-    if (!creator) {
+    const creator2 = await this.db.v1.User.GetCreatorByPageNameWithFollowStatus(pageName, currentUserId);
+    
+    if (!creator2) {
       throw new BadRequest('Creator not found');
     }
 
+    const creator = await this.db.v1.User.GetCreatorByIdWithFollowStatus(creator2.id, currentUserId);
+    const recentPosts = await this.db.v1.User.GetRecentPostsByCreator(creator.id);
+
+    Logger.info("creator", creator);
+
+    const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creator.id , currentUserId);
+    const products = await this.db.v1.User.GetProductsByCreator(creator.id);
+    const events = await this.db.v1.User.GetEventsByCreator(creator.id, currentUserId);
     return {
       id: creator.id,
       pageName: creator.pageName,
@@ -289,27 +262,15 @@ export class UserService {
       socialLinks: creator.socialLinks,
       tags: creator.tags,
       categoryId: creator.categoryId,
-      isFollowing: creator.isFollowing,
+      isFollowing: creator.isfollowing,
+      isSubscribed: creator.isSubscriber,
       createdAt: creator.createdAt,
       updatedAt: creator.updatedAt,
-      followersCount: followersCount || 0,
-      subscribersCount: parseInt(creator.subscribersCount) || 17,
+      followersCount: parseInt(creator.followersCount) || 0,
+      subscribersCount: parseInt(creator.subscribersCount),
       category: creator.category || 'music',
-      totalPosts: parseInt(creator.totalPosts) || 0,
-      memberships:[
-        {
-          id: '1',
-          name: 'Free',
-          price: 0,
-          currency: 'NGN',
-        },
-        {
-          id: '2',
-          name: 'Subscription',
-          price: 9.99,
-          currency: 'NGN',
-        },
-      ],
+      totalPosts: recentPosts.length,
+      memberships:memeberships,
       recentPosts: recentPosts.map((post: any) => ({
         id: post.id,
         title: post.title,
@@ -319,41 +280,9 @@ export class UserService {
         totalComments: parseInt(post.totalComments) || 0,
         mediaFiles: post.mediaFiles || [],
       })),
-      exploreOthers: [
-        {
-          id:  '1',
-          title:  'Title 1',
-          createdAt: new Date().toISOString(),
-          public:  true,
-          totalLikes:  10,
-          totalComments: 10,
-        },
-        {
-          id: '2',
-          title: 'Title 2',
-          public:  false,
-          createdAt:  new Date().toISOString(),
-          totalLikes:  15,
-          totalComments:  15,
-        },
-        {
-          id:  '3',
-          title:  'Title 3',
-          createdAt: new Date().toISOString(),
-          public:  true,
-          totalLikes:  10,
-          totalComments: 10,
-        },
-        {
-          id: '4',
-          title: 'Title 4',
-          public:  false,
-          createdAt:  new Date().toISOString(),
-          totalLikes:  15,
-          totalComments:  15,
-        },
-      
-      ]
+      products: products,
+      events: events,
+     
     }
   }
 
@@ -776,16 +705,45 @@ export class UserService {
       throw new BadRequest('You do not have permission for this action. Only creators can create products.');
     }
 
-    const product: Partial<Entities.Product> = {
-      creatorId,
-      name: body.name,
-      description: body.description,
-      mediaUrl: body.mediaUrl,
-      price: body.price,
-    };
+    try {
+      // Create Stripe product
+      const stripeProduct = await stripeService.createProduct(
+        body.name,
+        body.description || `Digital product: ${body.name}`
+      );
 
-    const id = await this.db.v1.User.CreateProduct(product);
-    return id;
+      // Create Stripe price (one-time payment, convert price to number)
+      const priceAmount = parseFloat(body.price);
+      const currency = 'ngn'; // Default to NGN for products
+      
+      const stripePrice = await stripeService.createOneTimePrice(
+        stripeProduct.id,
+        priceAmount,
+        currency
+      );
+
+      const product: Partial<Entities.Product> = {
+        creatorId,
+        name: body.name,
+        description: body.description,
+        mediaUrl: body.mediaUrl,
+        price: body.price,
+        stripeProductId: stripeProduct.id,
+        stripePriceId: stripePrice.id,
+      };
+
+      const id = await this.db.v1.User.CreateProduct(product);
+      Logger.info('UserService.CreateProduct success', { 
+        productId: id, 
+        stripeProductId: stripeProduct.id, 
+        stripePriceId: stripePrice.id 
+      });
+      
+      return id;
+    } catch (error) {
+      Logger.error('UserService.CreateProduct failed', error);
+      throw new AppError(500, 'Failed to create product with Stripe integration');
+    }
   }
 
   public async GetProductsByCreator(creatorId: string, validateCreator: boolean = true): Promise<Entities.Product[]> {
@@ -839,6 +797,52 @@ export class UserService {
         delete updateData[key as keyof Entities.Product];
       }
     });
+
+    // If price changed and product has Stripe integration, update Stripe price
+    if (body.price && product.stripeProductId && parseFloat(body.price) !== parseFloat(product.price)) {
+      try {
+        Logger.info('UserService.UpdateProduct - Updating Stripe price', { 
+          productId, 
+          oldPrice: product.price, 
+          newPrice: body.price 
+        });
+
+        // Create a new price in Stripe (we can't update existing prices)
+        const priceAmount = parseFloat(body.price);
+        const newStripePrice = await stripeService.createOneTimePrice(
+          product.stripeProductId,
+          priceAmount,
+          'ngn'
+        );
+
+        // Update the product with the new Stripe price ID
+        updateData.stripePriceId = newStripePrice.id;
+
+        Logger.info('UserService.UpdateProduct - Stripe price updated', { 
+          newStripePriceId: newStripePrice.id 
+        });
+      } catch (error) {
+        Logger.error('UserService.UpdateProduct - Failed to update Stripe price', error);
+        // Continue with update even if Stripe update fails
+      }
+    }
+
+    // If name or description changed and product has Stripe integration, update Stripe product
+    if (product.stripeProductId && (body.name || body.description)) {
+      try {
+        const stripe = stripeService.getStripeInstance();
+        await stripe.products.update(product.stripeProductId, {
+          name: body.name || product.name,
+          description: body.description || product.description || undefined,
+        });
+        Logger.info('UserService.UpdateProduct - Stripe product updated', { 
+          stripeProductId: product.stripeProductId 
+        });
+      } catch (error) {
+        Logger.error('UserService.UpdateProduct - Failed to update Stripe product', error);
+        // Continue with update even if Stripe update fails
+      }
+    }
 
     return await this.db.v1.User.UpdateProduct(productId, updateData);
   }
@@ -1482,6 +1486,57 @@ export class UserService {
     }
   }
 
+  // Stripe checkout session for product purchases
+  public async CreateProductCheckoutSession(
+    userId: string, 
+    productId: string, 
+    successUrl: string, 
+    cancelUrl: string
+  ): Promise<{ sessionId: string; url: string }> {
+    Logger.info('UserService.CreateProductCheckoutSession', { userId, productId, successUrl, cancelUrl });
+
+    // Get product details
+    const product = await this.db.v1.User.GetProductById(productId);
+    if (!product) {
+      throw new BadRequest('Product not found');
+    }
+
+    if (!product.stripePriceId) {
+      throw new BadRequest('Product does not have Stripe integration configured');
+    }
+
+    // Get user details for customer email
+    const user = await this.db.v1.User.GetUser({ id: userId });
+    if (!user) {
+      throw new BadRequest('User not found');
+    }
+
+    try {
+      // Create Stripe checkout session for one-time payment
+      const session = await stripeService.createPaymentCheckoutSession(
+        product.stripePriceId,
+        successUrl,
+        cancelUrl,
+        user.email,
+        {
+          userId,
+          productId,
+          creatorId: product.creatorId,
+        }
+      );
+
+      Logger.info('UserService.CreateProductCheckoutSession success', { sessionId: session.id });
+
+      return {
+        sessionId: session.id,
+        url: session.url || '',
+      };
+    } catch (error) {
+      Logger.error('UserService.CreateProductCheckoutSession failed', error);
+      throw new AppError(500, 'Failed to create product checkout session');
+    }
+  }
+
   // Stripe webhook handlers
   public async CreateSubscriptionFromStripe(subscriptionData: {
     subscriberId: string;
@@ -1626,6 +1681,118 @@ export class UserService {
     } catch (error) {
       Logger.error('UserService.CreateTransactionFromInvoice failed', error);
       throw error;
+    }
+  }
+
+  // Product Purchase webhook handlers
+  public async CreateProductPurchaseFromStripe(purchaseData: {
+    userId: string;
+    productId: string;
+    creatorId: string;
+    stripeCheckoutSessionId: string;
+    stripePaymentIntentId?: string;
+    stripeChargeId?: string;
+    stripeCustomerId?: string;
+    amount: number;
+    currency: string;
+    status: 'pending' | 'completed' | 'failed' | 'refunded';
+  }): Promise<void> {
+    Logger.info('UserService.CreateProductPurchaseFromStripe', purchaseData);
+
+    try {
+      // Check if purchase already exists
+      const existingPurchase = await this.db.v1.User.GetProductPurchaseByCheckoutSession(
+        purchaseData.stripeCheckoutSessionId
+      );
+
+      if (existingPurchase) {
+        Logger.info('Product purchase already exists, updating', { 
+          purchaseId: existingPurchase.id 
+        });
+        
+        await this.db.v1.User.UpdateProductPurchase(existingPurchase.id, {
+          status: purchaseData.status,
+          stripePaymentIntentId: purchaseData.stripePaymentIntentId,
+          stripeChargeId: purchaseData.stripeChargeId,
+          stripeCustomerId: purchaseData.stripeCustomerId,
+          purchasedAt: purchaseData.status === 'completed' ? new Date().toISOString() : undefined,
+        });
+        return;
+      }
+
+      const purchase: Partial<Entities.ProductPurchase> = {
+        userId: purchaseData.userId,
+        productId: purchaseData.productId,
+        creatorId: purchaseData.creatorId,
+        stripeCheckoutSessionId: purchaseData.stripeCheckoutSessionId,
+        stripePaymentIntentId: purchaseData.stripePaymentIntentId,
+        stripeChargeId: purchaseData.stripeChargeId,
+        stripeCustomerId: purchaseData.stripeCustomerId,
+        amount: purchaseData.amount,
+        currency: purchaseData.currency,
+        status: purchaseData.status,
+        purchasedAt: purchaseData.status === 'completed' ? new Date().toISOString() : undefined,
+      };
+
+      await this.db.v1.User.CreateProductPurchase(purchase);
+      Logger.info('Product purchase created from Stripe webhook', { 
+        purchaseId: purchaseData.productId 
+      });
+    } catch (error) {
+      Logger.error('UserService.CreateProductPurchaseFromStripe failed', error);
+      throw error;
+    }
+  }
+
+  public async CreateTransactionFromProductPurchase(transactionData: {
+    userId: string;
+    productId: string;
+    creatorId: string;
+    stripePaymentIntentId?: string;
+    stripeChargeId?: string;
+    stripeCustomerId?: string;
+    amount: number;
+    currency: string;
+    status: 'succeeded' | 'failed' | 'pending' | 'canceled' | 'refunded';
+  }): Promise<void> {
+    Logger.info('UserService.CreateTransactionFromProductPurchase', transactionData);
+
+    try {
+      const transaction: Partial<Entities.Transaction> = {
+        productId: transactionData.productId,
+        subscriberId: transactionData.userId, // Using subscriberId field for buyer
+        creatorId: transactionData.creatorId,
+        stripePaymentIntentId: transactionData.stripePaymentIntentId,
+        stripeChargeId: transactionData.stripeChargeId,
+        stripeCustomerId: transactionData.stripeCustomerId,
+        transactionType: 'payment',
+        status: transactionData.status,
+        amount: transactionData.amount,
+        currency: transactionData.currency,
+        processedAt: transactionData.status === 'succeeded' ? new Date().toISOString() : undefined,
+        description: `Product purchase transaction`,
+      };
+
+      await this.db.v1.User.CreateTransaction(transaction);
+      Logger.info('Transaction created from product purchase', { 
+        productId: transactionData.productId 
+      });
+    } catch (error) {
+      Logger.error('UserService.CreateTransactionFromProductPurchase failed', error);
+      throw error;
+    }
+  }
+
+  // Check if user has purchased a product
+  public async HasUserPurchasedProduct(userId: string, productId: string): Promise<boolean> {
+    Logger.info('UserService.HasUserPurchasedProduct', { userId, productId });
+
+    try {
+      const purchase = await this.db.v1.User.GetProductPurchaseByUserAndProduct(userId, productId);
+      return purchase !== null && purchase.status === 'completed';
+    } catch (error) {
+      Logger.error('UserService.HasUserPurchasedProduct failed', error);
+      return false;
     }
   }
 }

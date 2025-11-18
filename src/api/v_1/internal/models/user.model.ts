@@ -98,6 +98,15 @@ export const CreateCheckoutSessionBodySchema = z.object({
 
 export type CreateCheckoutSessionBody = z.infer<typeof CreateCheckoutSessionBodySchema>;
 
+// Product checkout session schema
+export const CreateProductCheckoutSessionBodySchema = z.object({
+  productId: z.string().uuid('Invalid product ID'),
+  successUrl: z.string().url('Invalid success URL'),
+  cancelUrl: z.string().url('Invalid cancel URL'),
+});
+
+export type CreateProductCheckoutSessionBody = z.infer<typeof CreateProductCheckoutSessionBodySchema>;
+
 // Membership response interface
 export interface MembershipResponse extends DefaultTable {
   creatorId: string;

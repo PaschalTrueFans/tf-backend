@@ -68,42 +68,120 @@ export class WebhookController {
     session: Stripe.Checkout.Session, 
     userService: UserService
   ): Promise<void> {
-    Logger.info('Processing checkout.session.completed', { sessionId: session.id });
+    Logger.info('Processing checkout.session.completed', { sessionId: session.id, mode: session.mode });
 
     try {
-      const { userId, membershipId, creatorId } = session.metadata || {};
+      const { userId, creatorId } = session.metadata || {};
       
-      if (!userId || !membershipId || !creatorId) {
+      if (!userId || !creatorId) {
         Logger.error('Missing metadata in checkout session', { sessionId: session.id });
         return;
       }
 
-      // Get the subscription from Stripe
-      const subscriptionId = session.subscription as string;
-      if (!subscriptionId) {
-        Logger.error('No subscription ID in checkout session', { sessionId: session.id });
-        return;
+      // Check if this is a product purchase (mode: 'payment') or subscription (mode: 'subscription')
+      if (session.mode === 'payment') {
+        // Handle product purchase
+        const { productId } = session.metadata || {};
+        
+        if (!productId) {
+          Logger.error('Missing productId in checkout session metadata', { sessionId: session.id });
+          return;
+        }
+
+        // Get payment intent details
+        const paymentIntentId = session.payment_intent as string;
+        let paymentIntent = null;
+        let chargeId = null;
+        let customerId = session.customer as string || null;
+
+        if (paymentIntentId) {
+          try {
+            const stripe = stripeService.getStripeInstance();
+            paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+            chargeId = typeof paymentIntent.latest_charge === 'string' 
+              ? paymentIntent.latest_charge 
+              : paymentIntent.latest_charge?.id || null;
+            customerId = customerId || (typeof paymentIntent.customer === 'string' 
+              ? paymentIntent.customer 
+              : paymentIntent.customer?.id || null);
+          } catch (error) {
+            Logger.error('Error retrieving payment intent', error);
+          }
+        }
+
+        // Get amount from session
+        const amount = session.amount_total ? session.amount_total / 100 : 0;
+        const currency = session.currency?.toUpperCase() || 'NGN';
+
+        // Create product purchase record
+        await userService.CreateProductPurchaseFromStripe({
+          userId,
+          productId,
+          creatorId,
+          stripeCheckoutSessionId: session.id,
+          stripePaymentIntentId: paymentIntentId || undefined,
+          stripeChargeId: chargeId || undefined,
+          stripeCustomerId: customerId || undefined,
+          amount,
+          currency,
+          status: session.payment_status === 'paid' ? 'completed' : 'pending',
+        });
+
+        // Create transaction record
+        await userService.CreateTransactionFromProductPurchase({
+          userId,
+          productId,
+          creatorId,
+          stripePaymentIntentId: paymentIntentId || undefined,
+          stripeChargeId: chargeId || undefined,
+          stripeCustomerId: customerId || undefined,
+          amount,
+          currency,
+          status: session.payment_status === 'paid' ? 'succeeded' : 'pending',
+        });
+
+        Logger.info('Product purchase created successfully', { 
+          userId, 
+          creatorId, 
+          productId, 
+          sessionId: session.id 
+        });
+      } else if (session.mode === 'subscription') {
+        // Handle subscription (existing logic)
+        const { membershipId } = session.metadata || {};
+        
+        if (!membershipId) {
+          Logger.error('Missing membershipId in checkout session', { sessionId: session.id });
+          return;
+        }
+
+        // Get the subscription from Stripe
+        const subscriptionId = session.subscription as string;
+        if (!subscriptionId) {
+          Logger.error('No subscription ID in checkout session', { sessionId: session.id });
+          return;
+        }
+
+        const stripeSubscription = await stripeService.getSubscription(subscriptionId);
+        
+        // Create subscription in our database
+        await userService.CreateSubscriptionFromStripe({
+          subscriberId: userId,
+          creatorId,
+          membershipId,
+          stripeSubscriptionId: subscriptionId,
+          stripeCustomerId: stripeSubscription.customer as string,
+          subscriptionStatus: stripeSubscription.status,
+          startedAt: new Date(stripeSubscription.created * 1000),
+        });
+
+        Logger.info('Subscription created successfully', { 
+          userId, 
+          creatorId, 
+          membershipId, 
+          subscriptionId 
+        });
       }
-
-      const stripeSubscription = await stripeService.getSubscription(subscriptionId);
-      
-      // Create subscription in our database
-      await userService.CreateSubscriptionFromStripe({
-        subscriberId: userId,
-        creatorId,
-        membershipId,
-        stripeSubscriptionId: subscriptionId,
-        stripeCustomerId: stripeSubscription.customer as string,
-        subscriptionStatus: stripeSubscription.status,
-        startedAt: new Date(stripeSubscription.created * 1000),
-      });
-
-      Logger.info('Subscription created successfully', { 
-        userId, 
-        creatorId, 
-        membershipId, 
-        subscriptionId 
-      });
     } catch (error) {
       Logger.error('Error handling checkout.session.completed', error);
     }

@@ -54,6 +54,7 @@ router.put('/products/:id', userController.updateProduct);
 router.delete('/products/:id', userController.deleteProduct);
 
 router.get('/creators/:creatorId/products', userController.getCreatorProducts);
+router.get('/products/:productId/purchase-status', userController.checkProductPurchase);
 
 // Event CRUD
 router.post('/events', userController.createEvent);
@@ -75,6 +76,7 @@ router.get('/creators/:creatorId/subscribers', userController.getCreatorSubscrib
 
 // Stripe checkout session
 router.post('/checkout-session', userController.createCheckoutSession);
+router.post('/product-checkout-session', userController.createProductCheckoutSession);
 router.post('/subscriptions/:subscriptionId/cancel', userController.cancelSubscription);
 
 // Insights routes
