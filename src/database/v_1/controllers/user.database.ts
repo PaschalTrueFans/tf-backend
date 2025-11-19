@@ -1650,6 +1650,38 @@ export class UserDatabase {
     return id;
   }
 
+  async UpdateTransactionBalanceStatus(transactionId: string, balanceStatus: 'incoming' | 'available'): Promise<void> {
+    this.logger.info('Db.UpdateTransactionBalanceStatus', { transactionId, balanceStatus });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('transactions')
+      .where({ id: transactionId })
+      .update({ balanceStatus });
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateTransactionBalanceStatus failed', err);
+      throw new AppError(400, 'Failed to update transaction balance status');
+    }
+  }
+
+  async UpdateTransactionBalanceStatusByStripePaymentIntent(paymentIntentId: string, balanceStatus: 'incoming' | 'available'): Promise<void> {
+    this.logger.info('Db.UpdateTransactionBalanceStatusByStripePaymentIntent', { paymentIntentId, balanceStatus });
+
+    const knexdb = this.GetKnex();
+    const query = knexdb('transactions')
+      .where({ stripePaymentIntentId: paymentIntentId })
+      .update({ balanceStatus });
+
+    const { err } = await this.RunQuery(query);
+
+    if (err) {
+      this.logger.error('Db.UpdateTransactionBalanceStatusByStripePaymentIntent failed', err);
+      throw new AppError(400, 'Failed to update transaction balance status');
+    }
+  }
+
   // Product Purchase methods
   async CreateProductPurchase(purchase: Partial<Entities.ProductPurchase>): Promise<string> {
     this.logger.info('Db.CreateProductPurchase', { purchase });
@@ -2342,6 +2374,234 @@ export class UserDatabase {
       today,
       thisWeek,
       thisMonth,
+    };
+  }
+
+  // Transaction methods for payouts
+  async GetCreatorTransactions(creatorId: string, filters?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    type?: string;
+  }): Promise<{
+    transactions: Entities.Transaction[];
+    total: number;
+  }> {
+    this.logger.info('Db.GetCreatorTransactions', { creatorId, filters });
+
+    const knexdb = this.GetKnex();
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const offset = (page - 1) * limit;
+
+    let query = knexdb('transactions')
+      .where({ creatorId })
+      .orderBy('createdAt', 'desc');
+
+    if (filters?.status) {
+      query = query.where('status', filters.status);
+    }
+
+    if (filters?.type) {
+      query = query.where('transactionType', filters.type);
+    }
+
+    // Get total count
+    const countQuery = query.clone().clearSelect().clearOrder().count({ total: 'id' });
+    const { res: countRes, err: countErr } = await this.RunQuery(countQuery);
+
+    if (countErr) {
+      this.logger.error('Db.GetCreatorTransactions failed counting', countErr);
+      throw new AppError(400, 'Failed to count transactions');
+    }
+
+    const total = parseInt(countRes?.[0]?.total ?? '0', 10);
+
+    // Get paginated transactions
+    const transactionsQuery = query
+      .select('*')
+      .limit(limit)
+      .offset(offset);
+
+    const { res: transactionsRes, err: transactionsErr } = await this.RunQuery(transactionsQuery);
+
+    if (transactionsErr) {
+      this.logger.error('Db.GetCreatorTransactions failed fetching', transactionsErr);
+      throw new AppError(400, 'Failed to fetch transactions');
+    }
+
+    return {
+      transactions: (transactionsRes || []) as Entities.Transaction[],
+      total,
+    };
+  }
+
+  async GetCreatorWalletBalance(creatorId: string): Promise<{
+    totalBalance: number;
+    availableBalance: number;
+    pendingBalance: number;
+    totalEarnings: number;
+    totalWithdrawals: number;
+    thisMonthEarnings: number;
+  }> {
+    this.logger.info('Db.GetCreatorWalletBalance', { creatorId });
+
+    const knexdb = this.GetKnex();
+
+    // Calculate balance from transactions (most accurate for individual creators)
+    // Note: Stripe platform balance is not creator-specific, so we use transaction-based calculation
+
+    // Note: We removed the redundant earningsQuery - using totalEarningsQuery instead
+
+    // Get succeeded withdrawals
+    const succeededWithdrawalsQuery = knexdb('transactions')
+      .where({ creatorId })
+      .where('transactionType', 'withdrawal')
+      .where('status', 'succeeded')
+      .sum('amount as total')
+      .first();
+
+    // Get pending withdrawals
+    const pendingWithdrawalsQuery = knexdb('transactions')
+      .where({ creatorId })
+      .where('transactionType', 'withdrawal')
+      .where('status', 'pending')
+      .sum('amount as total')
+      .first();
+
+    // Get available earnings (balanceStatus = 'available' and status = 'succeeded')
+    const availableEarningsQuery = knexdb('transactions')
+      .where({ creatorId })
+      .whereIn('status', ['succeeded'])
+      .whereIn('transactionType', ['subscription', 'payment'])
+      .where('balanceStatus', 'available') // Only count explicitly available transactions
+      .select(knexdb.raw('COALESCE(SUM(COALESCE("netAmount", "amount", 0)), 0) as total'))
+      .first();
+
+    // Get pending/incoming earnings (balanceStatus = 'incoming' or status = 'pending' or NULL)
+    // Treat NULL balanceStatus as incoming (conservative approach for old transactions)
+    const pendingEarningsQuery = knexdb('transactions')
+      .where({ creatorId })
+      .whereIn('transactionType', ['subscription', 'payment'])
+      .where(function() {
+        this.where('status', 'pending')
+          .orWhere(function() {
+            this.where('status', 'succeeded')
+              .where(function() {
+                this.where('balanceStatus', 'incoming')
+                  .orWhereNull('balanceStatus'); // Old transactions without balanceStatus are treated as incoming
+              });
+          });
+      })
+      .select(knexdb.raw('COALESCE(SUM(COALESCE("netAmount", "amount", 0)), 0) as total'))
+      .first();
+
+    // Get total earnings (all time) - all succeeded transactions
+    const totalEarningsQuery = knexdb('transactions')
+      .where({ creatorId })
+      .whereIn('status', ['succeeded'])
+      .whereIn('transactionType', ['subscription', 'payment'])
+      .select(knexdb.raw('COALESCE(SUM(COALESCE("netAmount", "amount", 0)), 0) as total'))
+      .first();
+
+    // Get this month earnings
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const thisMonthQuery = knexdb('transactions')
+      .where({ creatorId })
+      .whereIn('status', ['succeeded'])
+      .whereIn('transactionType', ['subscription', 'payment'])
+      .where('createdAt', '>=', startOfMonth.toISOString())
+      .select(knexdb.raw('COALESCE(SUM(COALESCE("netAmount", "amount", 0)), 0) as total'))
+      .first();
+
+    // Get total withdrawals
+    const totalWithdrawalsQuery = knexdb('transactions')
+      .where({ creatorId })
+      .where('transactionType', 'withdrawal')
+      .where('status', 'succeeded')
+      .sum('amount as total')
+      .first();
+
+    const [
+      { res: succeededWithdrawalsRes, err: succeededWithdrawalsErr },
+      { res: pendingWithdrawalsRes, err: pendingWithdrawalsErr },
+      { res: availableEarningsRes, err: availableEarningsErr },
+      { res: pendingEarningsRes, err: pendingEarningsErr },
+      { res: totalEarningsRes, err: totalEarningsErr },
+      { res: thisMonthRes, err: thisMonthErr },
+      { res: totalWithdrawalsRes, err: totalWithdrawalsErr },
+    ] = await Promise.all([
+      this.RunQuery(succeededWithdrawalsQuery),
+      this.RunQuery(pendingWithdrawalsQuery),
+      this.RunQuery(availableEarningsQuery),
+      this.RunQuery(pendingEarningsQuery),
+      this.RunQuery(totalEarningsQuery),
+      this.RunQuery(thisMonthQuery),
+      this.RunQuery(totalWithdrawalsQuery),
+    ]);
+
+    if (succeededWithdrawalsErr || pendingWithdrawalsErr || availableEarningsErr || pendingEarningsErr || totalEarningsErr || thisMonthErr || totalWithdrawalsErr) {
+      this.logger.error('Db.GetCreatorWalletBalance failed', {
+        succeededWithdrawalsErr,
+        pendingWithdrawalsErr,
+        availableEarningsErr,
+        pendingEarningsErr,
+        totalEarningsErr,
+        thisMonthErr,
+        totalWithdrawalsErr,
+      });
+      throw new AppError(400, 'Failed to calculate wallet balance');
+    }
+
+    // Parse results - .first() returns a single object, not an array
+    // Also handle NULL from SUM when no rows match
+    const getTotal = (res: any): number => {
+      if (!res) return 0;
+      // .first() returns object directly, not array
+      const value = res.total || res[0]?.total || (Array.isArray(res) ? res[0]?.total : null);
+      // SUM returns NULL when no rows, convert to 0
+      if (value === null || value === undefined) return 0;
+      return parseFloat(String(value)) || 0;
+    };
+
+    const totalEarnings = getTotal(totalEarningsRes);
+    const totalWithdrawals = getTotal(totalWithdrawalsRes);
+    const pendingWithdrawals = getTotal(pendingWithdrawalsRes);
+    const availableEarnings = getTotal(availableEarningsRes);
+    const pendingEarnings = getTotal(pendingEarningsRes);
+    const thisMonthEarnings = getTotal(thisMonthRes);
+
+    // Calculate balances based on balanceStatus
+    // Available balance = earnings with balanceStatus='available' minus succeeded withdrawals
+    const availableBalance = availableEarnings - totalWithdrawals;
+    // Pending balance = earnings with balanceStatus='incoming' or status='pending' + pending withdrawals
+    const pendingBalance = pendingEarnings + pendingWithdrawals;
+    // Total balance = all earnings minus all withdrawals
+    const totalBalance = (availableEarnings + pendingEarnings) - (totalWithdrawals + pendingWithdrawals);
+
+    this.logger.info('Got balance from transactions', {
+      creatorId,
+      totalBalance,
+      availableBalance,
+      pendingBalance,
+      totalEarnings,
+      totalWithdrawals,
+      thisMonthEarnings,
+      totalEarningsRaw: totalEarningsRes?.[0]?.total,
+      thisMonthEarningsRaw: thisMonthRes?.[0]?.total,
+      totalWithdrawalsRaw: totalWithdrawalsRes?.[0]?.total,
+    });
+
+    return {
+      totalBalance: Math.max(0, totalBalance),
+      availableBalance: Math.max(0, availableBalance),
+      pendingBalance: Math.max(0, pendingBalance),
+      totalEarnings,
+      totalWithdrawals,
+      thisMonthEarnings,
     };
   }
 }

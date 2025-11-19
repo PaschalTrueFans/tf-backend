@@ -175,6 +175,7 @@ export interface Transaction extends DefaultTable {
   currency: string;
   fee?: number;
   netAmount?: number;
+  balanceStatus?: 'incoming' | 'available'; // Stripe balance status: incoming = pending, available = ready for payout
   billingPeriodStart?: string;
   billingPeriodEnd?: string;
   processedAt?: string;

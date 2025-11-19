@@ -53,6 +53,14 @@ export class WebhookController {
           await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription, userService);
           break;
           
+        case 'charge.succeeded':
+          await this.handleChargeSucceeded(event.data.object as Stripe.Charge, userService);
+          break;
+          
+        case 'charge.updated':
+          await this.handleChargeUpdated(event.data.object as Stripe.Charge, userService);
+          break;
+          
         default:
           Logger.info('Unhandled webhook event type', { eventType: event.type });
       }
@@ -276,6 +284,68 @@ export class WebhookController {
       Logger.info('Subscription marked as canceled', { subscriptionId: subscription.id });
     } catch (error) {
       Logger.error('Error handling customer.subscription.deleted', error);
+    }
+  }
+
+  private async handleChargeSucceeded(
+    charge: Stripe.Charge,
+    userService: UserService
+  ): Promise<void> {
+    Logger.info('Processing charge.succeeded', { chargeId: charge.id, paymentIntentId: charge.payment_intent });
+
+    try {
+      if (!charge.payment_intent || typeof charge.payment_intent !== 'string') {
+        Logger.info('No payment intent found in charge', { chargeId: charge.id });
+        return;
+      }
+
+      // Use our helper method to determine balance status
+      // This method checks the balance transaction's available_on date
+      const balanceStatus = await stripeService.getPaymentBalanceStatus(
+        charge.payment_intent,
+        charge.id,
+        new Date(charge.created * 1000)
+      );
+      
+      await userService.UpdateTransactionBalanceStatus(charge.payment_intent, balanceStatus);
+      Logger.info('Transaction balance status updated', { 
+        chargeId: charge.id, 
+        paymentIntentId: charge.payment_intent,
+        balanceStatus
+      });
+    } catch (error) {
+      Logger.error('Error handling charge.succeeded', error);
+    }
+  }
+
+  private async handleChargeUpdated(
+    charge: Stripe.Charge,
+    userService: UserService
+  ): Promise<void> {
+    Logger.info('Processing charge.updated', { chargeId: charge.id, paymentIntentId: charge.payment_intent });
+
+    try {
+      if (!charge.payment_intent || typeof charge.payment_intent !== 'string') {
+        Logger.info('No payment intent found in charge', { chargeId: charge.id });
+        return;
+      }
+
+      // Re-check balance status when charge is updated
+      // This handles cases where funds become available after the initial charge
+      const balanceStatus = await stripeService.getPaymentBalanceStatus(
+        charge.payment_intent,
+        charge.id,
+        new Date(charge.created * 1000)
+      );
+      
+      await userService.UpdateTransactionBalanceStatus(charge.payment_intent, balanceStatus);
+      Logger.info('Transaction balance status updated (charge.updated)', { 
+        chargeId: charge.id, 
+        paymentIntentId: charge.payment_intent,
+        balanceStatus
+      });
+    } catch (error) {
+      Logger.error('Error handling charge.updated', error);
     }
   }
 }

@@ -1107,4 +1107,48 @@ export class UserController {
     }
     res.json(body);
   };
+
+  // Payouts and Wallet endpoints
+  public getCreatorTransactions = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const status = (req.query.status as string) || undefined;
+      const type = (req.query.type as string) || undefined;
+
+      const response = await service.GetCreatorTransactions(userId, {
+        page,
+        limit,
+        status,
+        type,
+      });
+
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  public getCreatorWalletBalance = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      const balance = await service.GetCreatorWalletBalance(userId);
+      body = { data: balance };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
 }

@@ -99,4 +99,8 @@ router.delete('/group-invites/:id', userController.deleteGroupInvite);
 router.post('/send-verification-email', userController.sendVerificationEmail);
 router.post('/verify-email', userController.verifyUser);
 
+// Payouts and Wallet routes
+router.get('/payouts/transactions', userController.getCreatorTransactions);
+router.get('/payouts/wallet-balance', userController.getCreatorWalletBalance);
+
 export { router as userRoutes };

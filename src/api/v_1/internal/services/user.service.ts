@@ -1644,6 +1644,23 @@ export class UserService {
         ? new Date(invoice.period_end * 1000) 
         : null;
 
+      // Get balance status from Stripe (non-blocking - defaults to 'incoming' if fails)
+      let balanceStatus: 'incoming' | 'available' = 'incoming';
+      try {
+        const { stripeService } = await import('../../../../helpers/stripe');
+        const paymentDate = invoice.status_transitions?.paid_at 
+          ? new Date(invoice.status_transitions.paid_at * 1000)
+          : new Date();
+        balanceStatus = await stripeService.getPaymentBalanceStatus(
+          paymentIntentId || undefined,
+          chargeId || undefined,
+          paymentDate
+        );
+      } catch (error) {
+        Logger.error('Failed to get balance status from Stripe, defaulting to incoming', error);
+        // Default to incoming if Stripe API call fails
+      }
+
       // Create transaction record
       const transaction: Partial<Entities.Transaction> = {
         subscriptionId: subscription.id,
@@ -1659,6 +1676,7 @@ export class UserService {
         currency,
         fee: fee ?? undefined,
         netAmount: netAmount ?? undefined,
+        balanceStatus: balanceStatus as any, // Add balance status
         billingPeriodStart: billingPeriodStart ? billingPeriodStart.toISOString() : undefined,
         billingPeriodEnd: billingPeriodEnd ? billingPeriodEnd.toISOString() : undefined,
         processedAt: invoice.status_transitions?.paid_at
@@ -1758,6 +1776,24 @@ export class UserService {
     Logger.info('UserService.CreateTransactionFromProductPurchase', transactionData);
 
     try {
+      // Calculate fee and net amount (Stripe fee is approximately 2.9% + 30 cents)
+      const fee = transactionData.amount * 0.029 + 0.30;
+      const netAmount = transactionData.amount - fee;
+
+      // Get balance status from Stripe (non-blocking - defaults to 'incoming' if fails)
+      let balanceStatus: 'incoming' | 'available' = 'incoming';
+      try {
+        const { stripeService } = await import('../../../../helpers/stripe');
+        balanceStatus = await stripeService.getPaymentBalanceStatus(
+          transactionData.stripePaymentIntentId,
+          transactionData.stripeChargeId,
+          new Date()
+        );
+      } catch (error) {
+        Logger.info('Failed to get balance status from Stripe, defaulting to incoming', error);
+        // Default to incoming if Stripe API call fails
+      }
+
       const transaction: Partial<Entities.Transaction> = {
         productId: transactionData.productId,
         subscriberId: transactionData.userId, // Using subscriberId field for buyer
@@ -1769,6 +1805,9 @@ export class UserService {
         status: transactionData.status,
         amount: transactionData.amount,
         currency: transactionData.currency,
+        fee: fee,
+        netAmount: netAmount,
+        balanceStatus: balanceStatus as any, // Add balance status
         processedAt: transactionData.status === 'succeeded' ? new Date().toISOString() : undefined,
         description: `Product purchase transaction`,
       };
@@ -1793,6 +1832,91 @@ export class UserService {
     } catch (error) {
       Logger.error('UserService.HasUserPurchasedProduct failed', error);
       return false;
+    }
+  }
+
+  // Payouts and Wallet methods
+  public async GetCreatorTransactions(creatorId: string, filters?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    type?: string;
+  }): Promise<{
+    transactions: Entities.Transaction[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    try {
+      Logger.info('UserService.GetCreatorTransactions', { creatorId, filters });
+
+      const page = filters?.page || 1;
+      const limit = filters?.limit || 20;
+
+      const { transactions, total } = await this.db.v1.User.GetCreatorTransactions(creatorId, {
+        page,
+        limit,
+        status: filters?.status,
+        type: filters?.type,
+      });
+
+      return {
+        transactions,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    } catch (error) {
+      Logger.error('UserService.GetCreatorTransactions failed', error);
+      throw error;
+    }
+  }
+
+  public async GetCreatorWalletBalance(creatorId: string): Promise<{
+    totalBalance: number;
+    availableBalance: number;
+    pendingBalance: number;
+    totalEarnings: number;
+    totalWithdrawals: number;
+    thisMonthEarnings: number;
+  }> {
+    try {
+      Logger.info('UserService.GetCreatorWalletBalance', { creatorId });
+
+      const balance = await this.db.v1.User.GetCreatorWalletBalance(creatorId);
+
+      return balance;
+    } catch (error) {
+      Logger.error('UserService.GetCreatorWalletBalance failed', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update transaction balance status when funds become available
+   */
+  public async UpdateTransactionBalanceStatus(
+    paymentIntentId: string,
+    balanceStatus: 'incoming' | 'available'
+  ): Promise<void> {
+    try {
+      Logger.info('UserService.UpdateTransactionBalanceStatus', { paymentIntentId, balanceStatus });
+
+      await this.db.v1.User.UpdateTransactionBalanceStatusByStripePaymentIntent(
+        paymentIntentId,
+        balanceStatus
+      );
+
+      Logger.info('Transaction balance status updated successfully', { paymentIntentId, balanceStatus });
+    } catch (error) {
+      Logger.error('UserService.UpdateTransactionBalanceStatus failed', error);
+      throw error;
     }
   }
 }
