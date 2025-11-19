@@ -193,7 +193,7 @@ export class UserService {
     Logger.info("creator", creator);
 
     const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId , currentUserId);
-    const products = await this.db.v1.User.GetProductsByCreator(creatorId);
+    const products = await this.db.v1.User.GetProductsByCreatorWithPurchaseStatus(creatorId, currentUserId);
     const events = await this.db.v1.User.GetEventsByCreator(creatorId, currentUserId);
     return {
       id: creator.id,
@@ -247,7 +247,7 @@ export class UserService {
     Logger.info("creator", creator);
 
     const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creator.id , currentUserId);
-    const products = await this.db.v1.User.GetProductsByCreator(creator.id);
+    const products = await this.db.v1.User.GetProductsByCreatorWithPurchaseStatus(creator.id, currentUserId);
     const events = await this.db.v1.User.GetEventsByCreator(creator.id, currentUserId);
     return {
       id: creator.id,

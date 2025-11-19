@@ -868,6 +868,58 @@ export class UserDatabase {
     return res ?? [];
   }
 
+  async GetProductsByCreatorWithPurchaseStatus(creatorId: string, userId?: string): Promise<Array<Entities.Product & { hasPurchased?: boolean }>> {
+    this.logger.info('Db.GetProductsByCreatorWithPurchaseStatus', { creatorId, userId });
+
+    const knexdb = this.GetKnex();
+    
+    // Get all products for the creator
+    const productsQuery = knexdb('products')
+      .where({ creatorId })
+      .orderBy('createdAt', 'desc');
+
+    const { res: products, err: productsErr } = await this.RunQuery(productsQuery);
+
+    if (productsErr) {
+      this.logger.error('Db.GetProductsByCreatorWithPurchaseStatus failed', productsErr);
+      throw new AppError(400, 'Failed to fetch products');
+    }
+
+    if (!products || products.length === 0) {
+      return [];
+    }
+
+    // If no userId provided, return products without purchase status
+    if (!userId) {
+      return products.map((p: Entities.Product) => ({ ...p, hasPurchased: false }));
+    }
+
+    // Get purchase status for all products at once
+    const productIds = products.map((p: Entities.Product) => p.id);
+    const purchasesQuery = knexdb('product_purchases')
+      .whereIn('productId', productIds)
+      .where({ userId })
+      .where('status', 'completed')
+      .select('productId');
+
+    const { res: purchases, err: purchasesErr } = await this.RunQuery(purchasesQuery);
+
+    if (purchasesErr) {
+      this.logger.error('Db.GetProductsByCreatorWithPurchaseStatus - failed to get purchases', purchasesErr);
+      // Return products without purchase status if query fails
+      return products.map((p: Entities.Product) => ({ ...p, hasPurchased: false }));
+    }
+
+    // Create a set of purchased product IDs for quick lookup
+    const purchasedProductIds = new Set((purchases || []).map((p: any) => p.productId));
+
+    // Map products with purchase status
+    return products.map((product: Entities.Product) => ({
+      ...product,
+      hasPurchased: purchasedProductIds.has(product.id),
+    }));
+  }
+
   async UpdateProduct(productId: string, updateData: Partial<Entities.Product>): Promise<Entities.Product | null> {
     this.logger.info('Db.UpdateProduct', { productId, updateData });
 
