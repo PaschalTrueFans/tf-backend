@@ -123,6 +123,8 @@ export interface Membership extends DefaultTable {
   description?: string;
   stripeProductId?: string;
   stripePriceId?: string;
+  platformFee?: number;
+  priceWithFee?: number;
 }
 
 export interface Product extends DefaultTable {
@@ -133,6 +135,8 @@ export interface Product extends DefaultTable {
   price: string;
   stripeProductId?: string;
   stripePriceId?: string;
+  platformFee?: number;
+  priceWithFee?: number;
 }
 
 export interface Event extends DefaultTable {
@@ -175,6 +179,9 @@ export interface Transaction extends DefaultTable {
   currency: string;
   fee?: number;
   netAmount?: number;
+  platformFee?: number; // Platform fee percentage applied
+  originalPrice?: number; // Original price before platform fee
+  priceWithFee?: number; // Price with platform fee included
   balanceStatus?: 'incoming' | 'available'; // Stripe balance status: incoming = pending, available = ready for payout
   billingPeriodStart?: string;
   billingPeriodEnd?: string;
@@ -202,6 +209,9 @@ export interface ProductPurchase extends DefaultTable {
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
   purchasedAt?: string;
+  platformFee?: number; // Platform fee percentage applied
+  originalPrice?: number; // Original price before platform fee
+  priceWithFee?: number; // Price with platform fee included
 }
 
 export interface Conversation extends DefaultTable {

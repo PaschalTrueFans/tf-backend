@@ -577,6 +577,43 @@ export class UserService {
   }
 
   // Membership CRUD methods with creator validation
+  /**
+   * Helper method to get platform fee from settings
+   */
+  private async getPlatformFee(): Promise<number> {
+    try {
+      const settings = await this.db.v1.Admin.GetSettings();
+      if (!settings) {
+        Logger.error('No settings found, using default platform fee of 0');
+        return 0;
+      }
+      const platformFee = parseFloat(settings.platformFee) || 0;
+      Logger.info('Platform fee retrieved from settings', { 
+        platformFee, 
+        settingsPlatformFee: settings.platformFee 
+      });
+      return platformFee;
+    } catch (error) {
+      Logger.error('Failed to get platform fee from settings', error);
+      return 0; // Default to 0 if there's an error
+    }
+  }
+
+  /**
+   * Helper method to calculate price with platform fee
+   */
+  private calculatePriceWithPlatformFee(originalPrice: number, platformFee: number): number {
+    const feeAmount = (platformFee / 100) * originalPrice;
+    const totalPrice = originalPrice + feeAmount;
+    Logger.info('Price calculation with platform fee', {
+      originalPrice,
+      platformFee,
+      feeAmount,
+      totalPrice
+    });
+    return totalPrice;
+  }
+
   public async CreateMembership(creatorId: string, body: any): Promise<string> {
     Logger.info('UserService.CreateMembership', { creatorId, body });
 
@@ -587,37 +624,68 @@ export class UserService {
     }
 
     try {
+      // Get platform fee from settings
+      const platformFee = await this.getPlatformFee();
+      Logger.info('UserService.CreateMembership - Platform fee', { platformFee });
+
+      if (platformFee === 0) {
+        Logger.error('UserService.CreateMembership - Platform fee is 0. No fee will be added to the price. Make sure settings have a platform fee configured.');
+      }
+
       // Create Stripe product
       const stripeProduct = await stripeService.createProduct(
         `${creator.pageName} - ${body.name}`,
         body.description || `Membership subscription for ${creator.pageName}`
       );
 
-      // Create Stripe price (convert price to number and handle currency)
-      const priceAmount = parseFloat(body.price);
+      // Calculate price with platform fee for Stripe
+      const originalPrice = parseFloat(body.price);
+      const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
       const currency = body.currency?.toLowerCase() || 'ngn';
       
+      Logger.info('UserService.CreateMembership - Price calculation', { 
+        originalPrice, 
+        platformFee, 
+        priceWithFee,
+        feeAmount: priceWithFee - originalPrice
+      });
+
+      // Create Stripe price with the total amount (original price + platform fee)
+      // Note: Stripe expects amount in smallest currency unit (kobo for NGN)
+      // createPrice handles the conversion (amount * 100)
       const stripePrice = await stripeService.createPrice(
         stripeProduct.id,
-        priceAmount,
+        priceWithFee,
         currency
       );
+      
+      Logger.info('UserService.CreateMembership - Stripe price created', {
+        stripePriceId: stripePrice.id,
+        stripePriceAmount: stripePrice.unit_amount, // This is in kobo (smallest unit)
+        stripePriceCurrency: stripePrice.currency,
+        calculatedPriceWithFee: priceWithFee
+      });
 
+      // Store the original price in the database (what users see)
       const membership: Partial<Entities.Membership> = {
         creatorId,
         name: body.name,
-        price: body.price,
+        price: body.price, // Store original price for display
         currency: body.currency || 'NGN',
         description: body.description,
         stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
+        platformFee: platformFee, // Store platform fee percentage
+        priceWithFee: priceWithFee, // Store price with fee for reference
       };
 
       const id = await this.db.v1.User.CreateMembership(membership);
       Logger.info('UserService.CreateMembership success', { 
         membershipId: id, 
         stripeProductId: stripeProduct.id, 
-        stripePriceId: stripePrice.id 
+        stripePriceId: stripePrice.id,
+        originalPrice,
+        priceWithFee
       });
       
       return id;
@@ -706,37 +774,68 @@ export class UserService {
     }
 
     try {
+      // Get platform fee from settings
+      const platformFee = await this.getPlatformFee();
+      Logger.info('UserService.CreateProduct - Platform fee', { platformFee });
+
+      if (platformFee === 0) {
+        Logger.error('UserService.CreateProduct - Platform fee is 0. No fee will be added to the price. Make sure settings have a platform fee configured.');
+      }
+
       // Create Stripe product
       const stripeProduct = await stripeService.createProduct(
         body.name,
         body.description || `Digital product: ${body.name}`
       );
 
-      // Create Stripe price (one-time payment, convert price to number)
-      const priceAmount = parseFloat(body.price);
+      // Calculate price with platform fee for Stripe
+      const originalPrice = parseFloat(body.price);
+      const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
       const currency = 'ngn'; // Default to NGN for products
       
+      Logger.info('UserService.CreateProduct - Price calculation', { 
+        originalPrice, 
+        platformFee, 
+        priceWithFee,
+        feeAmount: priceWithFee - originalPrice
+      });
+
+      // Create Stripe price with the total amount (original price + platform fee)
+      // Note: Stripe expects amount in smallest currency unit (kobo for NGN)
+      // createOneTimePrice handles the conversion (amount * 100)
       const stripePrice = await stripeService.createOneTimePrice(
         stripeProduct.id,
-        priceAmount,
+        priceWithFee,
         currency
       );
+      
+      Logger.info('UserService.CreateProduct - Stripe price created', {
+        stripePriceId: stripePrice.id,
+        stripePriceAmount: stripePrice.unit_amount, // This is in kobo (smallest unit)
+        stripePriceCurrency: stripePrice.currency,
+        calculatedPriceWithFee: priceWithFee
+      });
 
+      // Store the original price in the database (what users see)
       const product: Partial<Entities.Product> = {
         creatorId,
         name: body.name,
         description: body.description,
         mediaUrl: body.mediaUrl,
-        price: body.price,
+        price: body.price, // Store original price for display
         stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
+        platformFee: platformFee, // Store platform fee percentage
+        priceWithFee: priceWithFee, // Store price with fee for reference
       };
 
       const id = await this.db.v1.User.CreateProduct(product);
       Logger.info('UserService.CreateProduct success', { 
         productId: id, 
         stripeProductId: stripeProduct.id, 
-        stripePriceId: stripePrice.id 
+        stripePriceId: stripePrice.id,
+        originalPrice,
+        priceWithFee
       });
       
       return id;
@@ -807,19 +906,36 @@ export class UserService {
           newPrice: body.price 
         });
 
-        // Create a new price in Stripe (we can't update existing prices)
-        const priceAmount = parseFloat(body.price);
+        // Get platform fee from settings
+        const platformFee = await this.getPlatformFee();
+        
+        // Calculate price with platform fee for Stripe
+        const originalPrice = parseFloat(body.price);
+        const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
+        
+        Logger.info('UserService.UpdateProduct - Price calculation with platform fee', { 
+          originalPrice, 
+          platformFee, 
+          priceWithFee 
+        });
+
+        // Create a new price in Stripe (we can't update existing prices) with platform fee included
         const newStripePrice = await stripeService.createOneTimePrice(
           product.stripeProductId,
-          priceAmount,
+          priceWithFee,
           'ngn'
         );
 
-        // Update the product with the new Stripe price ID
+        // Update the product with the new Stripe price ID and platform fee info
         updateData.stripePriceId = newStripePrice.id;
+        updateData.platformFee = platformFee;
+        updateData.priceWithFee = priceWithFee;
 
         Logger.info('UserService.UpdateProduct - Stripe price updated', { 
-          newStripePriceId: newStripePrice.id 
+          newStripePriceId: newStripePrice.id,
+          originalPrice,
+          priceWithFee,
+          platformFee
         });
       } catch (error) {
         Logger.error('UserService.UpdateProduct - Failed to update Stripe price', error);
@@ -1620,11 +1736,21 @@ export class UserService {
         throw new AppError(404, 'Subscription not found');
       }
 
-      // Extract invoice data
+      // Extract invoice data first
       const amount = invoice.amount_paid / 100; // Convert from cents to dollars
       const currency = invoice.currency.toUpperCase();
       const fee = invoice.application_fee_amount ? invoice.application_fee_amount / 100 : null;
       const netAmount = invoice.amount_paid ? (invoice.amount_paid - (invoice.application_fee_amount || 0)) / 100 : null;
+
+      // Get membership details to retrieve platform fee information
+      const membership = await this.db.v1.User.GetMembershipById(subscription.membershipId);
+      if (!membership) {
+        Logger.error('Membership not found for subscription', { membershipId: subscription.membershipId });
+      }
+
+      const originalPrice = membership ? parseFloat(membership.price) : amount;
+      const platformFee = membership?.platformFee || 0;
+      const priceWithFee = membership?.priceWithFee || amount;
 
       // Get payment intent and charge IDs
       const paymentIntentId = typeof invoice.payment_intent === 'string' 
@@ -1676,6 +1802,9 @@ export class UserService {
         currency,
         fee: fee ?? undefined,
         netAmount: netAmount ?? undefined,
+        platformFee: platformFee,
+        originalPrice: originalPrice,
+        priceWithFee: priceWithFee,
         balanceStatus: balanceStatus as any, // Add balance status
         billingPeriodStart: billingPeriodStart ? billingPeriodStart.toISOString() : undefined,
         billingPeriodEnd: billingPeriodEnd ? billingPeriodEnd.toISOString() : undefined,
@@ -1723,6 +1852,16 @@ export class UserService {
         purchaseData.stripeCheckoutSessionId
       );
 
+      // Get product details to retrieve platform fee information
+      const product = await this.db.v1.User.GetProductById(purchaseData.productId);
+      if (!product) {
+        Logger.error('Product not found when creating purchase', { productId: purchaseData.productId });
+      }
+
+      const originalPrice = product ? parseFloat(product.price) : purchaseData.amount;
+      const platformFee = product?.platformFee || 0;
+      const priceWithFee = product?.priceWithFee || purchaseData.amount;
+
       if (existingPurchase) {
         Logger.info('Product purchase already exists, updating', { 
           purchaseId: existingPurchase.id 
@@ -1734,6 +1873,9 @@ export class UserService {
           stripeChargeId: purchaseData.stripeChargeId,
           stripeCustomerId: purchaseData.stripeCustomerId,
           purchasedAt: purchaseData.status === 'completed' ? new Date().toISOString() : undefined,
+          platformFee: platformFee,
+          originalPrice: originalPrice,
+          priceWithFee: priceWithFee,
         });
         return;
       }
@@ -1750,6 +1892,9 @@ export class UserService {
         currency: purchaseData.currency,
         status: purchaseData.status,
         purchasedAt: purchaseData.status === 'completed' ? new Date().toISOString() : undefined,
+        platformFee: platformFee,
+        originalPrice: originalPrice,
+        priceWithFee: priceWithFee,
       };
 
       await this.db.v1.User.CreateProductPurchase(purchase);
@@ -1776,6 +1921,16 @@ export class UserService {
     Logger.info('UserService.CreateTransactionFromProductPurchase', transactionData);
 
     try {
+      // Get product details to retrieve platform fee information
+      const product = await this.db.v1.User.GetProductById(transactionData.productId);
+      if (!product) {
+        Logger.error('Product not found when creating transaction', { productId: transactionData.productId });
+      }
+
+      const originalPrice = product ? parseFloat(product.price) : transactionData.amount;
+      const platformFee = product?.platformFee || 0;
+      const priceWithFee = product?.priceWithFee || transactionData.amount;
+
       // Calculate fee and net amount (Stripe fee is approximately 2.9% + 30 cents)
       const fee = transactionData.amount * 0.029 + 0.30;
       const netAmount = transactionData.amount - fee;
@@ -1807,6 +1962,9 @@ export class UserService {
         currency: transactionData.currency,
         fee: fee,
         netAmount: netAmount,
+        platformFee: platformFee,
+        originalPrice: originalPrice,
+        priceWithFee: priceWithFee,
         balanceStatus: balanceStatus as any, // Add balance status
         processedAt: transactionData.status === 'succeeded' ? new Date().toISOString() : undefined,
         description: `Product purchase transaction`,
