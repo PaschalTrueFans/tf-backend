@@ -8,7 +8,7 @@ export class EmailService {
 
   constructor() {
     Logger.info('EmailService initialized...');
-    
+
     // Create SMTP transporter with cPanel email credentials
     this.transporter = nodemailer.createTransport({
       host: SMTP.HOST,

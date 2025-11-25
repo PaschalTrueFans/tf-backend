@@ -68,24 +68,24 @@ export class UserService {
   public async UpdateUser(userId: string, updateData: Partial<User>): Promise<void> {
     Logger.info('UserService.UpdateUser', { userId, updateData });
 
-    const {socialLinks} = updateData;
+    const { socialLinks } = updateData;
     if (socialLinks) {
       updateData.socialLinks = JSON.stringify(socialLinks);
     }
 
-    if(updateData.email) {
+    if (updateData.email) {
 
       const existingUser = await this.db.v1.User.GetUser({ email: updateData.email });
-      if(existingUser) {
+      if (existingUser) {
         throw new BadRequest('User With this email already exist ');
       }
 
     }
 
-    if(updateData.pageName) {
+    if (updateData.pageName) {
 
       const existingUser = await this.db.v1.User.GetUser({ pageName: updateData.pageName });
-      if(existingUser) {
+      if (existingUser && existingUser.id !== userId) {
         throw new BadRequest('User With this PageName already exist ');
       }
 
@@ -169,8 +169,8 @@ export class UserService {
         socialLinks: creator.socialLinks,
         isFollowing: creator.isfollowing,
         followersCount: parseInt(creator.followersCount) || 0,
-        tags: creator.tags ,
-        category: creator.category ,
+        tags: creator.tags,
+        category: creator.category,
         subscribersCount: parseInt(creator.subscribersCount) || 0,
       })),
       pagination: {
@@ -192,7 +192,7 @@ export class UserService {
 
     Logger.info("creator", creator);
 
-    const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId , currentUserId);
+    const memeberships = await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId, currentUserId);
     const products = await this.db.v1.User.GetProductsByCreatorWithPurchaseStatus(creatorId, currentUserId);
     const events = await this.db.v1.User.GetEventsByCreator(creatorId, currentUserId);
     return {
@@ -216,7 +216,7 @@ export class UserService {
       subscribersCount: parseInt(creator.subscribersCount),
       category: creator.category || 'music',
       totalPosts: recentPosts.length,
-      memberships:memeberships,
+      memberships: memeberships,
       recentPosts: recentPosts.map((post: any) => ({
         id: post.id,
         title: post.title,
@@ -228,7 +228,7 @@ export class UserService {
       })),
       products: products,
       events: events,
-     
+
     }
   }
 
@@ -236,7 +236,7 @@ export class UserService {
     Logger.info('UserService.GetCreatorByPageName', { pageName, currentUserId });
 
     const creator2 = await this.db.v1.User.GetCreatorByPageNameWithFollowStatus(pageName, currentUserId);
-    
+
     if (!creator2) {
       throw new BadRequest('Creator not found');
     }
@@ -246,7 +246,7 @@ export class UserService {
 
     Logger.info("creator", creator);
 
-    const memeberships =  await this.db.v1.User.GetMembershipsOfCreatorForUser(creator.id , currentUserId);
+    const memeberships = await this.db.v1.User.GetMembershipsOfCreatorForUser(creator.id, currentUserId);
     const products = await this.db.v1.User.GetProductsByCreatorWithPurchaseStatus(creator.id, currentUserId);
     const events = await this.db.v1.User.GetEventsByCreator(creator.id, currentUserId);
     return {
@@ -270,7 +270,7 @@ export class UserService {
       subscribersCount: parseInt(creator.subscribersCount),
       category: creator.category || 'music',
       totalPosts: recentPosts.length,
-      memberships:memeberships,
+      memberships: memeberships,
       recentPosts: recentPosts.map((post: any) => ({
         id: post.id,
         title: post.title,
@@ -282,7 +282,7 @@ export class UserService {
       })),
       products: products,
       events: events,
-     
+
     }
   }
 
@@ -306,7 +306,7 @@ export class UserService {
     if (result.action === 'followed') {
       try {
         const follower = await this.db.v1.User.GetUser({ id: followerId });
-        
+
         const notification: Partial<Entities.Notification> = {
           userId: userId, // Creator receives the notification
           title: 'New Follower!',
@@ -316,12 +316,12 @@ export class UserService {
           type: 'creator',
           isRead: false,
         };
-        
+
         await this.CreateNotification(notification);
-        
-        Logger.info('UserService.ToggleFollowCreator - Creator notification created', { 
-          creatorId: userId, 
-          followerId: followerId 
+
+        Logger.info('UserService.ToggleFollowCreator - Creator notification created', {
+          creatorId: userId,
+          followerId: followerId
         });
       } catch (error) {
         // Log error but don't fail the follow action
@@ -359,7 +359,7 @@ export class UserService {
     // Create notifications for all subscribers
     try {
       const subscribers = await this.db.v1.User.GetSubscriptionsByCreatorId(creatorId);
-      
+
       // Create notifications for each subscriber
       const notificationPromises = subscribers.map(async (subscriber) => {
         const notification: Partial<Entities.Notification> = {
@@ -371,17 +371,17 @@ export class UserService {
           type: 'member',
           isRead: false,
         };
-        
+
         return this.CreateNotification(notification);
       });
 
       // Execute all notification creations in parallel
       await Promise.all(notificationPromises);
-      
-      Logger.info('UserService.CreatePost - Notifications created', { 
-        creatorId, 
-        postId: id, 
-        subscriberCount: subscribers.length 
+
+      Logger.info('UserService.CreatePost - Notifications created', {
+        creatorId,
+        postId: id,
+        subscriberCount: subscribers.length
       });
     } catch (error) {
       // Log error but don't fail the post creation
@@ -393,7 +393,7 @@ export class UserService {
 
   public async UpdatePost(postId: string, body: PostModel.UpdatePostBody): Promise<Entities.Post | null> {
     Logger.info('UserService.UpdatePost', { postId, body: { ...body, content: '[omitted]' } });
-    const {mediaFiles , ...data} = body
+    const { mediaFiles, ...data } = body
     const updated = await this.db.v1.User.UpdatePost(postId, data as Partial<Entities.Post>);
     if (mediaFiles) {
       const mediaFiles2 = mediaFiles.map((m) => ({ type: m.type, url: m.url, name: m.name, size: m.size }));
@@ -420,27 +420,27 @@ export class UserService {
   }> {
     Logger.info('UserService.GetAllPosts', { userId, page, limit });
 
-// Three types of POSTS
-// 1. Paid Posts membership based
-// 2. Posts by followed creators
-// 3. Free Posts By Other Creators 
+    // Three types of POSTS
+    // 1. Paid Posts membership based
+    // 2. Posts by followed creators
+    // 3. Free Posts By Other Creators 
 
-// 1. Paid Posts membership based
+    // 1. Paid Posts membership based
     const paidPosts = await this.db.v1.User.GetAllPaidPostsByMembershipCreators(userId, page, limit);
 
-// 2. Posts by followed creators
+    // 2. Posts by followed creators
     const followedPosts = await this.db.v1.User.GetAllPostsByFollowedCreator(userId, page, limit);
 
-// 3. Free Posts By Other Creators 
+    // 3. Free Posts By Other Creators 
     const publicPosts = await this.db.v1.User.GetPublicPostsByOtherCreators(userId, page, limit);
 
     // Combine posts from both sources
-    
+
     // Sort by creation date (most recent first)
     paidPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     followedPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     publicPosts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
+
     const allPosts = [...paidPosts, ...followedPosts, ...publicPosts];
     // Apply pagination to combined results
     const startIndex = (page - 1) * limit;
@@ -483,18 +483,18 @@ export class UserService {
 
   private stripHtmlAndTruncate(content: string, maxLength: number): string {
     if (!content) return '';
-    
+
     // Remove HTML tags
     const stripped = content.replace(/<[^>]*>/g, '');
-    
+
     // Remove extra whitespace and newlines
     const cleaned = stripped.replace(/\s+/g, ' ').trim();
-    
+
     // Truncate to maxLength
     if (cleaned.length <= maxLength) {
       return cleaned;
     }
-    
+
     return cleaned.substring(0, maxLength) + '...';
   }
 
@@ -502,14 +502,14 @@ export class UserService {
     Logger.info('UserService.GetPostById', { postId, userId });
     const row = await this.db.v1.User.GetPostById(postId);
     if (!row) return null;
-    
+
     // Check if current user has liked this post
     let isLiked = false;
     if (userId) {
       const existingLike = await this.db.v1.User.GetPostLike(postId, userId);
       isLiked = !!existingLike;
     }
-    
+
     return {
       id: row.id,
       createdAt: row.createdAt,
@@ -588,9 +588,9 @@ export class UserService {
         return 0;
       }
       const platformFee = parseFloat(settings.platformFee) || 0;
-      Logger.info('Platform fee retrieved from settings', { 
-        platformFee, 
-        settingsPlatformFee: settings.platformFee 
+      Logger.info('Platform fee retrieved from settings', {
+        platformFee,
+        settingsPlatformFee: settings.platformFee
       });
       return platformFee;
     } catch (error) {
@@ -642,10 +642,10 @@ export class UserService {
       const originalPrice = parseFloat(body.price);
       const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
       const currency = body.currency?.toLowerCase() || 'ngn';
-      
-      Logger.info('UserService.CreateMembership - Price calculation', { 
-        originalPrice, 
-        platformFee, 
+
+      Logger.info('UserService.CreateMembership - Price calculation', {
+        originalPrice,
+        platformFee,
         priceWithFee,
         feeAmount: priceWithFee - originalPrice
       });
@@ -658,7 +658,7 @@ export class UserService {
         priceWithFee,
         currency
       );
-      
+
       Logger.info('UserService.CreateMembership - Stripe price created', {
         stripePriceId: stripePrice.id,
         stripePriceAmount: stripePrice.unit_amount, // This is in kobo (smallest unit)
@@ -680,14 +680,14 @@ export class UserService {
       };
 
       const id = await this.db.v1.User.CreateMembership(membership);
-      Logger.info('UserService.CreateMembership success', { 
-        membershipId: id, 
-        stripeProductId: stripeProduct.id, 
+      Logger.info('UserService.CreateMembership success', {
+        membershipId: id,
+        stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
         originalPrice,
         priceWithFee
       });
-      
+
       return id;
     } catch (error) {
       Logger.error('UserService.CreateMembership failed', error);
@@ -792,10 +792,10 @@ export class UserService {
       const originalPrice = parseFloat(body.price);
       const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
       const currency = 'ngn'; // Default to NGN for products
-      
-      Logger.info('UserService.CreateProduct - Price calculation', { 
-        originalPrice, 
-        platformFee, 
+
+      Logger.info('UserService.CreateProduct - Price calculation', {
+        originalPrice,
+        platformFee,
         priceWithFee,
         feeAmount: priceWithFee - originalPrice
       });
@@ -808,7 +808,7 @@ export class UserService {
         priceWithFee,
         currency
       );
-      
+
       Logger.info('UserService.CreateProduct - Stripe price created', {
         stripePriceId: stripePrice.id,
         stripePriceAmount: stripePrice.unit_amount, // This is in kobo (smallest unit)
@@ -830,14 +830,14 @@ export class UserService {
       };
 
       const id = await this.db.v1.User.CreateProduct(product);
-      Logger.info('UserService.CreateProduct success', { 
-        productId: id, 
-        stripeProductId: stripeProduct.id, 
+      Logger.info('UserService.CreateProduct success', {
+        productId: id,
+        stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
         originalPrice,
         priceWithFee
       });
-      
+
       return id;
     } catch (error) {
       Logger.error('UserService.CreateProduct failed', error);
@@ -900,23 +900,23 @@ export class UserService {
     // If price changed and product has Stripe integration, update Stripe price
     if (body.price && product.stripeProductId && parseFloat(body.price) !== parseFloat(product.price)) {
       try {
-        Logger.info('UserService.UpdateProduct - Updating Stripe price', { 
-          productId, 
-          oldPrice: product.price, 
-          newPrice: body.price 
+        Logger.info('UserService.UpdateProduct - Updating Stripe price', {
+          productId,
+          oldPrice: product.price,
+          newPrice: body.price
         });
 
         // Get platform fee from settings
         const platformFee = await this.getPlatformFee();
-        
+
         // Calculate price with platform fee for Stripe
         const originalPrice = parseFloat(body.price);
         const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
-        
-        Logger.info('UserService.UpdateProduct - Price calculation with platform fee', { 
-          originalPrice, 
-          platformFee, 
-          priceWithFee 
+
+        Logger.info('UserService.UpdateProduct - Price calculation with platform fee', {
+          originalPrice,
+          platformFee,
+          priceWithFee
         });
 
         // Create a new price in Stripe (we can't update existing prices) with platform fee included
@@ -931,7 +931,7 @@ export class UserService {
         updateData.platformFee = platformFee;
         updateData.priceWithFee = priceWithFee;
 
-        Logger.info('UserService.UpdateProduct - Stripe price updated', { 
+        Logger.info('UserService.UpdateProduct - Stripe price updated', {
           newStripePriceId: newStripePrice.id,
           originalPrice,
           priceWithFee,
@@ -951,8 +951,8 @@ export class UserService {
           name: body.name || product.name,
           description: body.description || product.description || undefined,
         });
-        Logger.info('UserService.UpdateProduct - Stripe product updated', { 
-          stripeProductId: product.stripeProductId 
+        Logger.info('UserService.UpdateProduct - Stripe product updated', {
+          stripeProductId: product.stripeProductId
         });
       } catch (error) {
         Logger.error('UserService.UpdateProduct - Failed to update Stripe product', error);
@@ -1014,8 +1014,8 @@ export class UserService {
     Logger.info('UserService.GetEventsByCreator', { creatorId, currentUserId });
 
     // Check if user is a creator (only if validateCreator is true)
-      const creator = await this.db.v1.User.GetUser({ id: creatorId });
-      if (!creator || !creator.pageName) {
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) {
       throw new BadRequest('You do not have permission for this action. Only creators can view events.');
     }
 
@@ -1116,7 +1116,7 @@ export class UserService {
       try {
         const interestedUser = await this.db.v1.User.GetUser({ id: userId });
         const creator = await this.db.v1.User.GetUser({ id: event.creatorId });
-        
+
         const notification: Partial<Entities.Notification> = {
           userId: event.creatorId, // Creator receives the notification
           title: 'New Event Interest!',
@@ -1126,11 +1126,11 @@ export class UserService {
           type: 'creator',
           isRead: false,
         };
-        
+
         await this.CreateNotification(notification);
-        
-        Logger.info('UserService.ToggleEventInterest - Creator notification created', { 
-          creatorId: event.creatorId, 
+
+        Logger.info('UserService.ToggleEventInterest - Creator notification created', {
+          creatorId: event.creatorId,
           userId: userId,
           eventId: eventId
         });
@@ -1288,13 +1288,13 @@ export class UserService {
         type: 'creator',
         isRead: false,
       };
-      
+
       await this.CreateNotification(notification);
-      
-      Logger.info('UserService.SubscribeToCreator - Creator notification created', { 
-        creatorId: membership.creatorId, 
+
+      Logger.info('UserService.SubscribeToCreator - Creator notification created', {
+        creatorId: membership.creatorId,
         subscriberId: userId,
-        subscriptionId 
+        subscriptionId
       });
     } catch (error) {
       // Log error but don't fail the subscription
@@ -1434,7 +1434,7 @@ export class UserService {
 
     const groupInviteId = await this.db.v1.User.CreateGroupInvite(groupInvite);
 
-    
+
     return groupInviteId;
   }
 
@@ -1461,7 +1461,7 @@ export class UserService {
 
     // First verify the group invite belongs to the creator
     const existingGroupInvite = await this.db.v1.User.GetGroupInviteById(id);
-    
+
     if (!existingGroupInvite) {
       throw new BadRequest('Group invite not found');
     }
@@ -1484,7 +1484,7 @@ export class UserService {
 
     // First verify the group invite belongs to the creator
     const existingGroupInvite = await this.db.v1.User.GetGroupInviteById(id);
-    
+
     if (!existingGroupInvite) {
       throw new BadRequest('Group invite not found');
     }
@@ -1547,9 +1547,9 @@ export class UserService {
 
   // Stripe checkout session for subscriptions
   public async CreateCheckoutSession(
-    userId: string, 
-    membershipId: string, 
-    successUrl: string, 
+    userId: string,
+    membershipId: string,
+    successUrl: string,
     cancelUrl: string
   ): Promise<{ sessionId: string; url: string }> {
     Logger.info('UserService.CreateCheckoutSession', { userId, membershipId, successUrl, cancelUrl });
@@ -1604,9 +1604,9 @@ export class UserService {
 
   // Stripe checkout session for product purchases
   public async CreateProductCheckoutSession(
-    userId: string, 
-    productId: string, 
-    successUrl: string, 
+    userId: string,
+    productId: string,
+    successUrl: string,
     cancelUrl: string
   ): Promise<{ sessionId: string; url: string }> {
     Logger.info('UserService.CreateProductCheckoutSession', { userId, productId, successUrl, cancelUrl });
@@ -1678,8 +1678,8 @@ export class UserService {
       };
 
       await this.db.v1.User.CreateSubscription(subscription);
-      Logger.info('Subscription created from Stripe webhook', { 
-        subscriptionId: subscriptionData.stripeSubscriptionId 
+      Logger.info('Subscription created from Stripe webhook', {
+        subscriptionId: subscriptionData.stripeSubscriptionId
       });
     } catch (error) {
       Logger.error('UserService.CreateSubscriptionFromStripe failed', error);
@@ -1688,14 +1688,14 @@ export class UserService {
   }
 
   public async UpdateSubscriptionStatus(
-    stripeSubscriptionId: string, 
-    status: string, 
+    stripeSubscriptionId: string,
+    status: string,
     canceledAt?: Date
   ): Promise<void> {
-    Logger.info('UserService.UpdateSubscriptionStatus', { 
-      stripeSubscriptionId, 
-      status, 
-      canceledAt 
+    Logger.info('UserService.UpdateSubscriptionStatus', {
+      stripeSubscriptionId,
+      status,
+      canceledAt
     });
 
     try {
@@ -1722,15 +1722,15 @@ export class UserService {
     invoice: any,
     stripeSubscriptionId: string
   ): Promise<void> {
-    Logger.info('UserService.CreateTransactionFromInvoice', { 
-      invoiceId: invoice.id, 
-      stripeSubscriptionId 
+    Logger.info('UserService.CreateTransactionFromInvoice', {
+      invoiceId: invoice.id,
+      stripeSubscriptionId
     });
 
     try {
       // Get subscription from database
       const subscription = await this.db.v1.User.GetSubscriptionByStripeId(stripeSubscriptionId);
-      
+
       if (!subscription) {
         Logger.error('Subscription not found for Stripe subscription ID', { stripeSubscriptionId });
         throw new AppError(404, 'Subscription not found');
@@ -1753,28 +1753,28 @@ export class UserService {
       const priceWithFee = membership?.priceWithFee || amount;
 
       // Get payment intent and charge IDs
-      const paymentIntentId = typeof invoice.payment_intent === 'string' 
-        ? invoice.payment_intent 
+      const paymentIntentId = typeof invoice.payment_intent === 'string'
+        ? invoice.payment_intent
         : invoice.payment_intent?.id || null;
-      
+
       const chargeId = invoice.charge as string || null;
-      const customerId = typeof invoice.customer === 'string' 
-        ? invoice.customer 
+      const customerId = typeof invoice.customer === 'string'
+        ? invoice.customer
         : invoice.customer?.id || null;
 
       // Get billing period from invoice
-      const billingPeriodStart = invoice.period_start 
-        ? new Date(invoice.period_start * 1000) 
+      const billingPeriodStart = invoice.period_start
+        ? new Date(invoice.period_start * 1000)
         : null;
-      const billingPeriodEnd = invoice.period_end 
-        ? new Date(invoice.period_end * 1000) 
+      const billingPeriodEnd = invoice.period_end
+        ? new Date(invoice.period_end * 1000)
         : null;
 
       // Get balance status from Stripe (non-blocking - defaults to 'incoming' if fails)
       let balanceStatus: 'incoming' | 'available' = 'incoming';
       try {
         const { stripeService } = await import('../../../../helpers/stripe');
-        const paymentDate = invoice.status_transitions?.paid_at 
+        const paymentDate = invoice.status_transitions?.paid_at
           ? new Date(invoice.status_transitions.paid_at * 1000)
           : new Date();
         balanceStatus = await stripeService.getPaymentBalanceStatus(
@@ -1821,9 +1821,9 @@ export class UserService {
       };
 
       await this.db.v1.User.CreateTransaction(transaction);
-      Logger.info('Transaction created from invoice', { 
-        transactionId: invoice.id, 
-        subscriptionId: subscription.id 
+      Logger.info('Transaction created from invoice', {
+        transactionId: invoice.id,
+        subscriptionId: subscription.id
       });
     } catch (error) {
       Logger.error('UserService.CreateTransactionFromInvoice failed', error);
@@ -1863,10 +1863,10 @@ export class UserService {
       const priceWithFee = product?.priceWithFee || purchaseData.amount;
 
       if (existingPurchase) {
-        Logger.info('Product purchase already exists, updating', { 
-          purchaseId: existingPurchase.id 
+        Logger.info('Product purchase already exists, updating', {
+          purchaseId: existingPurchase.id
         });
-        
+
         await this.db.v1.User.UpdateProductPurchase(existingPurchase.id, {
           status: purchaseData.status,
           stripePaymentIntentId: purchaseData.stripePaymentIntentId,
@@ -1898,8 +1898,8 @@ export class UserService {
       };
 
       await this.db.v1.User.CreateProductPurchase(purchase);
-      Logger.info('Product purchase created from Stripe webhook', { 
-        purchaseId: purchaseData.productId 
+      Logger.info('Product purchase created from Stripe webhook', {
+        purchaseId: purchaseData.productId
       });
     } catch (error) {
       Logger.error('UserService.CreateProductPurchaseFromStripe failed', error);
@@ -1971,8 +1971,8 @@ export class UserService {
       };
 
       await this.db.v1.User.CreateTransaction(transaction);
-      Logger.info('Transaction created from product purchase', { 
-        productId: transactionData.productId 
+      Logger.info('Transaction created from product purchase', {
+        productId: transactionData.productId
       });
     } catch (error) {
       Logger.error('UserService.CreateTransactionFromProductPurchase failed', error);
