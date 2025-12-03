@@ -7,6 +7,7 @@ import { UserDatabase } from './v_1/controllers/user.database';
 import { AuthDatabase } from './v_1/controllers/auth.database';
 import { ChatDatabase } from './v_1/controllers/chat.database';
 import { AdminDatabase } from './v_1/controllers/admin.database';
+import { LinkInBioDatabase } from './v_1/controllers/link-in-bio.database';
 
 export class Db {
   // eslint-disable-next-line no-use-before-define
@@ -21,6 +22,7 @@ export class Db {
     Admin: AdminDatabase;
     Auth: AuthDatabase;
     Chat: ChatDatabase;
+    LinkInBio: LinkInBioDatabase;
   };
 
   // public v2: {
@@ -42,6 +44,7 @@ export class Db {
       Admin: new AdminDatabase(dbArgs),
       Auth: new AuthDatabase(dbArgs),
       Chat: new ChatDatabase(dbArgs),
+      LinkInBio: new LinkInBioDatabase(dbArgs),
     };
 
     // this.v2 = {

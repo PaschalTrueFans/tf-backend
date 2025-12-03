@@ -8,6 +8,7 @@ import SwaggerDocs from './swagger.json';
 import { Db } from './src/database/db';
 import { SeedsController } from './src/seeds/seeds.controller';
 import { ApiRouter } from './src/api/v_1/internal/routes';
+
 class App {
   constructor() {
     this.app = express();

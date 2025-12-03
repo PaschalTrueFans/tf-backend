@@ -10,7 +10,7 @@ class StripeService {
       if (!StripeConfig.SECRET_KEY) {
         throw new Error('Stripe secret key is not configured');
       }
-      
+
       this.stripe = new Stripe(StripeConfig.SECRET_KEY, {
         apiVersion: '2025-10-29.clover',
       });
@@ -24,7 +24,7 @@ class StripeService {
   async createProduct(name: string, description?: string): Promise<Stripe.Product> {
     try {
       Logger.info('StripeService.createProduct', { name, description });
-      
+
       const product = await this.getStripe().products.create({
         name,
         description: description || `Membership: ${name}`,
@@ -45,11 +45,11 @@ class StripeService {
   async createPrice(
     productId: string,
     amount: number,
-    currency: string = 'usd'
+    currency = 'usd'
   ): Promise<Stripe.Price> {
     try {
       Logger.info('StripeService.createPrice', { productId, amount, currency });
-      
+
       const price = await this.getStripe().prices.create({
         product: productId,
         unit_amount: Math.round(amount * 100), // Convert to cents
@@ -73,11 +73,11 @@ class StripeService {
   async createOneTimePrice(
     productId: string,
     amount: number,
-    currency: string = 'ngn'
+    currency = 'ngn'
   ): Promise<Stripe.Price> {
     try {
       Logger.info('StripeService.createOneTimePrice', { productId, amount, currency });
-      
+
       const price = await this.getStripe().prices.create({
         product: productId,
         unit_amount: Math.round(amount * 100), // Convert to cents
@@ -104,12 +104,12 @@ class StripeService {
     metadata?: Record<string, string>
   ): Promise<Stripe.Checkout.Session> {
     try {
-      Logger.info('StripeService.createCheckoutSession', { 
-        priceId, 
-        successUrl, 
-        cancelUrl, 
+      Logger.info('StripeService.createCheckoutSession', {
+        priceId,
+        successUrl,
+        cancelUrl,
         customerEmail,
-        metadata 
+        metadata
       });
 
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -151,12 +151,12 @@ class StripeService {
     metadata?: Record<string, string>
   ): Promise<Stripe.Checkout.Session> {
     try {
-      Logger.info('StripeService.createPaymentCheckoutSession', { 
-        priceId, 
-        successUrl, 
-        cancelUrl, 
+      Logger.info('StripeService.createPaymentCheckoutSession', {
+        priceId,
+        successUrl,
+        cancelUrl,
         customerEmail,
-        metadata 
+        metadata
       });
 
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -206,9 +206,9 @@ class StripeService {
   async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
     try {
       Logger.info('StripeService.cancelSubscription', { subscriptionId });
-      
+
       const subscription = await this.getStripe().subscriptions.cancel(subscriptionId);
-      
+
       Logger.info('StripeService.cancelSubscription success', { subscriptionId });
       return subscription;
     } catch (error) {
@@ -253,14 +253,14 @@ class StripeService {
   async getBalance(stripeAccountId?: string): Promise<Stripe.Balance> {
     try {
       Logger.info('StripeService.getBalance', { stripeAccountId });
-      
+
       const balance = stripeAccountId
         ? await this.getStripe().balance.retrieve({ stripeAccount: stripeAccountId })
         : await this.getStripe().balance.retrieve();
-      
-      Logger.info('StripeService.getBalance success', { 
+
+      Logger.info('StripeService.getBalance success', {
         available: balance.available,
-        pending: balance.pending 
+        pending: balance.pending
       });
       return balance;
     } catch (error) {
@@ -275,16 +275,16 @@ class StripeService {
   async getCustomerBalance(customerId: string): Promise<number> {
     try {
       Logger.info('StripeService.getCustomerBalance', { customerId });
-      
+
       const customer = await this.getStripe().customers.retrieve(customerId);
-      
+
       if (customer.deleted) {
         return 0;
       }
-      
+
       // Customer balance is in cents, negative means credit
       const balance = (customer as Stripe.Customer).balance || 0;
-      
+
       Logger.info('StripeService.getCustomerBalance success', { balance });
       return balance / 100; // Convert from cents to dollars
     } catch (error) {
@@ -296,15 +296,15 @@ class StripeService {
   /**
    * Get all charges for a customer (to calculate earnings)
    */
-  async getCustomerCharges(customerId: string, limit: number = 100): Promise<Stripe.Charge[]> {
+  async getCustomerCharges(customerId: string, limit = 100): Promise<Stripe.Charge[]> {
     try {
       Logger.info('StripeService.getCustomerCharges', { customerId, limit });
-      
+
       const charges = await this.getStripe().charges.list({
         customer: customerId,
         limit,
       });
-      
+
       Logger.info('StripeService.getCustomerCharges success', { count: charges.data.length });
       return charges.data;
     } catch (error) {
@@ -316,15 +316,15 @@ class StripeService {
   /**
    * Get payment intents for a customer
    */
-  async getCustomerPaymentIntents(customerId: string, limit: number = 100): Promise<Stripe.PaymentIntent[]> {
+  async getCustomerPaymentIntents(customerId: string, limit = 100): Promise<Stripe.PaymentIntent[]> {
     try {
       Logger.info('StripeService.getCustomerPaymentIntents', { customerId, limit });
-      
+
       const paymentIntents = await this.getStripe().paymentIntents.list({
         customer: customerId,
         limit,
       });
-      
+
       Logger.info('StripeService.getCustomerPaymentIntents success', { count: paymentIntents.data.length });
       return paymentIntents.data;
     } catch (error) {
@@ -339,9 +339,9 @@ class StripeService {
   async getPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
     try {
       Logger.info('StripeService.getPaymentIntent', { paymentIntentId });
-      
+
       const paymentIntent = await this.getStripe().paymentIntents.retrieve(paymentIntentId);
-      
+
       Logger.info('StripeService.getPaymentIntent success', { paymentIntentId });
       return paymentIntent;
     } catch (error) {
@@ -356,9 +356,9 @@ class StripeService {
   async getCharge(chargeId: string): Promise<Stripe.Charge> {
     try {
       Logger.info('StripeService.getCharge', { chargeId });
-      
+
       const charge = await this.getStripe().charges.retrieve(chargeId);
-      
+
       Logger.info('StripeService.getCharge success', { chargeId });
       return charge;
     } catch (error) {
@@ -378,7 +378,7 @@ class StripeService {
       // If we have a payment intent, check its status and balance transaction
       if (paymentIntentId) {
         const paymentIntent = await this.getPaymentIntent(paymentIntentId);
-        
+
         // If payment intent is not succeeded, it's still incoming
         if (paymentIntent.status !== 'succeeded') {
           return 'incoming';
@@ -387,13 +387,13 @@ class StripeService {
         // Check if there's a charge and get its balance transaction
         if (paymentIntent.latest_charge) {
           const charge = await this.getCharge(paymentIntent.latest_charge as string);
-          
+
           // If charge has a balance transaction, check its status
           if (charge.balance_transaction) {
             const balanceTransaction = await this.getStripe().balanceTransactions.retrieve(
               charge.balance_transaction as string
             );
-            
+
             // Balance transaction status: available means funds are available
             // pending means funds are still incoming
             if (balanceTransaction.status === 'available') {
@@ -406,12 +406,12 @@ class StripeService {
       // If we have a charge ID directly
       if (chargeId) {
         const charge = await this.getCharge(chargeId);
-        
+
         if (charge.balance_transaction) {
           const balanceTransaction = await this.getStripe().balanceTransactions.retrieve(
             charge.balance_transaction as string
           );
-          
+
           if (balanceTransaction.status === 'available') {
             return 'available';
           }

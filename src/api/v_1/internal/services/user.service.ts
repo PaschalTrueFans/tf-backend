@@ -95,6 +95,14 @@ export class UserService {
 
     if (!updatedUser) throw new BadRequest('User not found or update failed');
 
+    // Sync link-in-bio profile data if profile exists
+    try {
+      await this.db.v1.LinkInBio.SyncUserProfileData(userId, updateData);
+    } catch (error) {
+      Logger.debug('Failed to sync link-in-bio profile', error);
+      // Don't throw - sync failures shouldn't break user update
+    }
+
   }
 
   public async ResetPassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
@@ -117,6 +125,19 @@ export class UserService {
 
     // Update the password
     await this.db.v1.User.UpdateUser(userId, { password: hashedPassword });
+
+    // Send password changed notification email (non-blocking)
+    try {
+      const { FrontEndLink } = await import('../../../../helpers/env');
+      await this.emailService.SendPasswordChangedEmail(
+        user.email,
+        'Unknown', // IP address - can be added as parameter if needed
+        `${FrontEndLink.FRONT_END_LINK}/support` || 'https://truefans.ng/support'
+      );
+    } catch (error) {
+      Logger.error('Failed to send password changed email', error);
+      // Don't fail password reset if email fails
+    }
   }
 
   public async GetAllCreators(currentUserId?: string, page: number = 1, limit: number = 10): Promise<{

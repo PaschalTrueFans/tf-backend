@@ -37,6 +37,20 @@ export class AuthService {
       accessToken: accessToken,
       refreshToken: refreshToken,
     };
+
+    // Send welcome email (non-blocking)
+    try {
+      const { FrontEndLink } = await import('../../../../helpers/env');
+      await this.emailService.SendWelcomeEmail(
+        data.email,
+        data.name,
+        FrontEndLink.FRONT_END_LINK || 'https://truefans.ng'
+      );
+    } catch (error) {
+      Logger.error('Failed to send welcome email', error);
+      // Don't fail registration if email fails
+    }
+
     return token;
   }
 
@@ -78,7 +92,7 @@ export class AuthService {
 
     // Generate 6-digit OTP
     const otp = generateRandomOTP(6);
-    
+
     // Store OTP in verifySession table (old sessions for this user will be deleted automatically)
     await this.db.v1.Auth.StoreSessionToken({ userId: fetchedUser.id, otp: otp });
 

@@ -2,6 +2,7 @@ import * as express from 'express';
 import cors from 'cors';
 import { Logger } from '../../../../helpers/logger';
 import { internalOptions } from '../../../../helpers/cors';
+import { LinkInBioController } from '../controller/link-in-bio.controller';
 
 import fileUpload from 'express-fileupload';
 import { commonRoutes } from './common.routes';
@@ -9,6 +10,7 @@ import { authRoutes } from './auth.routes';
 import { userRoutes } from './user.routes';
 import { chatRoutes } from './chat.routes';
 import { adminRoutes } from './admin.routes';
+import { linkInBioRoutes } from './link-in-bio.routes';
 import webhookRoutes from './webhook.routes';
 
 export class ApiRouter {
@@ -36,6 +38,11 @@ export class ApiRouter {
     this.router.use('/user', userRoutes);
     this.router.use('/user/chat', chatRoutes);
     this.router.use('/admin', adminRoutes);
+    this.router.use('/link-in-bio', linkInBioRoutes);
+
+    // Public link-in-bio route alias
+    const linkInBioController = new LinkInBioController();
+    this.router.get('/:username/links', linkInBioController.getPublicProfile);
 
     this.router.use('*', (req: express.Request, res: express.Response): express.Response => {
       try {

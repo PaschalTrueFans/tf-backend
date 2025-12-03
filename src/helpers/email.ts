@@ -110,4 +110,63 @@ export class EmailService {
       throw error;
     }
   }
+
+  async SendWelcomeEmail(email: string, userName: string, platformUrl: string): Promise<void> {
+    try {
+      // Read the email template
+      const htmlTemplate = fs.readFileSync('src/emailTemplates/welcomeEmail.html', 'utf-8');
+
+      // Replace placeholders in template
+      const modifiedHtml = htmlTemplate
+        .replace('{{DATE}}', new Date().toLocaleDateString())
+        .replace('{{NAME}}', userName)
+        .replace(/{{PLATFORM_URL}}/g, platformUrl);
+
+      Logger.info('Sending welcome email to:', email);
+
+      // Send email using nodemailer
+      const info = await this.transporter.sendMail({
+        from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
+        to: email,
+        subject: 'Welcome to TRU-FANS! 🎉',
+        html: modifiedHtml,
+      });
+
+      Logger.info('Welcome email sent successfully:', info.messageId);
+    } catch (error) {
+      Logger.error('Error sending welcome email:', error);
+      // Don't throw - welcome email failures shouldn't block registration
+    }
+  }
+
+  async SendPasswordChangedEmail(email: string, ipAddress = 'Unknown', supportUrl: string): Promise<void> {
+    try {
+      // Read the email template
+      const htmlTemplate = fs.readFileSync('src/emailTemplates/passwordChanged.html', 'utf-8');
+
+      // Replace placeholders in template
+      const currentDate = new Date().toLocaleString();
+      const modifiedHtml = htmlTemplate
+        .replace(/{{DATE}}/g, currentDate)
+        .replace('{{EMAIL}}', email)
+        .replace('{{IP_ADDRESS}}', ipAddress)
+        .replace(/{{SUPPORT_URL}}/g, supportUrl);
+
+      Logger.info('Sending password changed email to:', email);
+
+      // Send email using nodemailer
+      const info = await this.transporter.sendMail({
+        from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
+        to: email,
+        subject: 'Your Password Has Been Changed - TRU-FANS',
+        html: modifiedHtml,
+      });
+
+      Logger.info('Password changed email sent successfully:', info.messageId);
+    } catch (error) {
+      Logger.error('Error sending password changed email:', error);
+      // Don't throw - notification email failures shouldn't block password change
+    }
+  }
 }
+
