@@ -120,6 +120,18 @@ export class AuthService {
     const hashedPassword = await hashPassword(password);
 
     await this.db.v1.User.UpdateUser(fetchedSession.userId, { password: hashedPassword });
+
+    // Send password changed email (non-blocking)
+    try {
+      const { FrontEndLink } = await import('../../../../helpers/env');
+      await this.emailService.SendPasswordChangedEmail(
+        email,
+        'Unknown', // IP address not available in this context
+        `${FrontEndLink.FRONT_END_LINK || 'https://truefans.ng'}/support`
+      );
+    } catch (error) {
+      Logger.error('Failed to send password changed email', error);
+    }
   }
 
   async ValidateRefreshToken(refreshToken: string): Promise<AuthModel.Tokens> {

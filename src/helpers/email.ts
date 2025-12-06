@@ -1,7 +1,11 @@
 import { SMTP } from './env';
-import * as fs from 'fs';
 import { Logger } from './logger';
 import nodemailer from 'nodemailer';
+import { render } from '@react-email/render';
+import WelcomeEmail from '../emails/WelcomeEmail';
+import OtpVerification from '../emails/OtpVerification';
+import EmailVerification from '../emails/EmailVerification';
+import PasswordChanged from '../emails/PasswordChanged';
 
 export class EmailService {
   private transporter: nodemailer.Transporter;
@@ -32,13 +36,7 @@ export class EmailService {
 
   async SendMail(email: string, otp: string): Promise<void> {
     try {
-      // Read the email template
-      const htmlTemplate = fs.readFileSync('src/emailTemplates/otpVerification.html', 'utf-8');
-
-      // Replace placeholders in template
-      const modifiedHtml = htmlTemplate
-        .replace('{{DATE}}', new Date().toLocaleDateString())
-        .replace('{{otp}}', otp);
+      const emailHtml = await render(OtpVerification({ otp }));
 
       Logger.info('Sending mail to:', email);
 
@@ -47,7 +45,7 @@ export class EmailService {
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
         subject: 'OTP Verification',
-        html: modifiedHtml,
+        html: emailHtml,
       });
 
       Logger.info('Email sent successfully:', info.messageId);
@@ -59,13 +57,7 @@ export class EmailService {
 
   async SendVerificationEmail(email: string, verificationLink: string): Promise<void> {
     try {
-      // Read the email template
-      const htmlTemplate = fs.readFileSync('src/emailTemplates/emailVerification.html', 'utf-8');
-
-      // Replace placeholders in template
-      const modifiedHtml = htmlTemplate
-        .replace('{{DATE}}', new Date().toLocaleDateString())
-        .replace(/{{VERIFICATION_LINK}}/g, verificationLink);
+      const emailHtml = await render(EmailVerification({ verificationLink }));
 
       Logger.info('Sending verification email to:', email);
 
@@ -74,7 +66,7 @@ export class EmailService {
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
         subject: 'Verify Your Email Address - TRU-FANS',
-        html: modifiedHtml,
+        html: emailHtml,
       });
 
       Logger.info('Verification email sent successfully:', info.messageId);
@@ -113,14 +105,7 @@ export class EmailService {
 
   async SendWelcomeEmail(email: string, userName: string, platformUrl: string): Promise<void> {
     try {
-      // Read the email template
-      const htmlTemplate = fs.readFileSync('src/emailTemplates/welcomeEmail.html', 'utf-8');
-
-      // Replace placeholders in template
-      const modifiedHtml = htmlTemplate
-        .replace('{{DATE}}', new Date().toLocaleDateString())
-        .replace('{{NAME}}', userName)
-        .replace(/{{PLATFORM_URL}}/g, platformUrl);
+      const emailHtml = await render(WelcomeEmail({ name: userName, platformUrl }));
 
       Logger.info('Sending welcome email to:', email);
 
@@ -129,7 +114,7 @@ export class EmailService {
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
         subject: 'Welcome to TRU-FANS! 🎉',
-        html: modifiedHtml,
+        html: emailHtml,
       });
 
       Logger.info('Welcome email sent successfully:', info.messageId);
@@ -141,16 +126,7 @@ export class EmailService {
 
   async SendPasswordChangedEmail(email: string, ipAddress = 'Unknown', supportUrl: string): Promise<void> {
     try {
-      // Read the email template
-      const htmlTemplate = fs.readFileSync('src/emailTemplates/passwordChanged.html', 'utf-8');
-
-      // Replace placeholders in template
-      const currentDate = new Date().toLocaleString();
-      const modifiedHtml = htmlTemplate
-        .replace(/{{DATE}}/g, currentDate)
-        .replace('{{EMAIL}}', email)
-        .replace('{{IP_ADDRESS}}', ipAddress)
-        .replace(/{{SUPPORT_URL}}/g, supportUrl);
+      const emailHtml = await render(PasswordChanged({ email, ipAddress, supportUrl }));
 
       Logger.info('Sending password changed email to:', email);
 
@@ -159,7 +135,7 @@ export class EmailService {
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
         subject: 'Your Password Has Been Changed - TRU-FANS',
-        html: modifiedHtml,
+        html: emailHtml,
       });
 
       Logger.info('Password changed email sent successfully:', info.messageId);
@@ -169,4 +145,3 @@ export class EmailService {
     }
   }
 }
-
