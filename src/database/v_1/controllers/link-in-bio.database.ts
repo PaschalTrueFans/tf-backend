@@ -111,7 +111,8 @@ export class LinkInBioDatabase {
 
   // Get public profile by username
   async GetPublicProfileByUsername(username: string): Promise<any> {
-    this.logger.info('Db.LinkInBio.GetPublicProfileByUsername', { username });
+    const lowercase_username = username.toLocaleLowerCase()
+    this.logger.info('Db.LinkInBio.GetPublicProfileByUsername', { lowercase_username });
 
     try {
       const knexdb = this.GetKnex();
@@ -153,7 +154,7 @@ export class LinkInBioDatabase {
         .leftJoin('link_in_bio_social_links as s', 's.profile_id', 'p.id')
         .whereRaw('(l.scheduled_start IS NULL OR l.scheduled_start <= NOW())')
         .andWhereRaw('(l.scheduled_end IS NULL OR l.scheduled_end >= NOW())')
-        .where('p.username', username)
+        .andWhereRaw('LOWER(p.username) = ?', [lowercase_username])
         .andWhere('p.is_published', true)
         .groupBy('p.id', 's.id');
 
