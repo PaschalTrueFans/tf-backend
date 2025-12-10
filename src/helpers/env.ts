@@ -58,7 +58,7 @@ export const SMTP = {
   USER: process.env.SMTP_USER as string,
   PASSWORD: process.env.SMTP_PASSWORD as string,
   FROM_EMAIL: process.env.SMTP_FROM_EMAIL as string,
-  FROM_NAME: process.env.SMTP_FROM_NAME || 'TRU-FANS',
+  FROM_NAME: process.env.SMTP_FROM_NAME || 'TRUE FANS',
   SECURE: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465', // true for 465, false for 587
   BREVO_KEY: process.env.BREVO_KEY as string,
   BREVO_URL: process.env.BREVO_URL as string,
