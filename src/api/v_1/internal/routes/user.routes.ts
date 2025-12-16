@@ -5,7 +5,10 @@ import { jwtAuth } from '../middlewares/api-auth';
 const router = express.Router();
 const userController = new UserController();
 
-// User routes
+// Public routes (no auth required)
+router.get('/creator/page/:pageName', userController.getCreatorByPageName);
+
+// Protected routes
 router.use(jwtAuth);
 
 router.get('/', userController.getCurrentUser);
@@ -16,7 +19,6 @@ router.put('/change-password', userController.resetPassword);
 router.get('/creators', userController.getAllCreators);
 router.get('/creators/suggested', userController.getSuggestedCreators);
 router.get('/creator/:id', userController.getCreatorById);
-router.get('/creator/page/:pageName', userController.getCreatorByPageName);
 
 // Toggle Follow/Unfollow route
 router.post('/creators/:id/follow', userController.toggleFollowCreator);
@@ -25,6 +27,7 @@ router.post('/creators/:id/follow', userController.toggleFollowCreator);
 router.post('/posts', userController.createPost);
 router.get('/posts', userController.getAllPosts);
 router.get('/my-posts', userController.getAllMyPosts);
+router.get('/posts/following', userController.getFollowingFeed);
 router.get('/posts/:id', userController.getPostById);
 router.put('/posts/:id', userController.updatePost);
 router.delete('/posts/:id', userController.deletePost);

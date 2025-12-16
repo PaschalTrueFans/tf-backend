@@ -59,6 +59,14 @@ export interface CreatorProfile {
   followersCount?: number;
   subscribersCount?: number;
   category?: string;
+  memberships?: any[];
+  products?: any[];
+  events?: any[];
+  recentPosts?: any[];
+  totalPosts?: number;
+  id?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UserResponse extends DefaultTable {

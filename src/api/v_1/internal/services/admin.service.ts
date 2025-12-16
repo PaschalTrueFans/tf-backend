@@ -34,8 +34,8 @@ export class AdminService {
         totalUsers,
         totalCreators,
         revenue: {
-          allTime: revenueData.allTime,
-          currentMonth: revenueData.currentMonth,
+          allTime: parseFloat(revenueData.allTime) || 0,
+          currentMonth: parseFloat(revenueData.currentMonth) || 0,
         },
         newSignups: {
           today: newSignupsData.today,
@@ -177,7 +177,7 @@ export class AdminService {
           name: ticket.userName,
           email: ticket.userEmail,
         },
-        comments: ticket.comments.map((comment) => ({
+        comments: ticket.comments.map((comment: any) => ({
           id: comment.id,
           ticketId: comment.ticketId,
           comment: comment.comment,
@@ -274,7 +274,7 @@ export class AdminService {
           name: ticket.userName,
           email: ticket.userEmail,
         },
-        comments: ticket.comments.map((comment) => ({
+        comments: ticket.comments.map((comment: any) => ({
           id: comment.id,
           ticketId: comment.ticketId,
           comment: comment.comment,
@@ -361,19 +361,19 @@ export class AdminService {
       // Send notifications to all users in batches to avoid connection pool exhaustion
       try {
         const userIds = await this.db.v1.User.GetAllUserIds();
-        
+
         // Use adminId as fromUserId, or use a system user ID if adminId is null
         const adminUser = await this.db.v1.User.GetUserByEmail('admin@truefans.ng');
         const fromUserId = adminUser?.id || userIds[0] || ''; // Fallback to first user if no admin
-        
+
         // Process notifications in batches to avoid overwhelming the database connection pool
         const BATCH_SIZE = 50; // Process 50 notifications at a time
         let successCount = 0;
         let errorCount = 0;
-        
+
         for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
           const batch = userIds.slice(i, i + BATCH_SIZE);
-          
+
           const batchPromises = batch.map(async (userId) => {
             const notification: Partial<Entities.Notification> = {
               userId,
@@ -384,7 +384,7 @@ export class AdminService {
               type: 'member',
               isRead: false,
             };
-            
+
             return this.db.v1.User.CreateNotification(notification);
           });
 
@@ -398,7 +398,7 @@ export class AdminService {
             }
           });
         }
-        
+
         Logger.info('AdminService.CreateSystemNotification - Notifications sent', {
           systemNotificationId: id,
           totalUsers: userIds.length,

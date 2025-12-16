@@ -4,11 +4,13 @@ import { z } from 'zod';
 // NOTE: The "Become my True Fan" link is mandatory and cannot be removed
 // It will always be the first link (order_index: 0) with the platform logo
 export const LinkSchema = z.object({
-  id: z.string().uuid().optional(),
-  type: z.enum(['standard', 'header', 'social', 'embedded', 'divider', 'post']).default('standard'),
+  id: z.string().optional(),
+  type: z.enum(['standard', 'header', 'social', 'embedded', 'divider', 'post', 'product']).default('standard'),
   title: z.string().max(255, 'Title must be 255 characters or less'),
   url: z.string().url('Invalid URL format').nullable().optional(),
   icon: z.string().nullable().optional(),
+  thumbnail: z.string().url('Invalid URL format').nullable().optional(),
+  productId: z.string().nullable().optional(),
   isActive: z.boolean().default(true),
   order: z.number().int().nonnegative().default(0),
   scheduledStart: z.date().nullable().optional(),
@@ -16,7 +18,7 @@ export const LinkSchema = z.object({
   customStyles: z.any().nullable().optional(),
   platform: z.string().nullable().optional(),
   embedCode: z.string().nullable().optional(),
-  postId: z.string().uuid().nullable().optional(),
+  postId: z.string().nullable().optional(),
 });
 
 export type Link = z.infer<typeof LinkSchema>;
@@ -45,8 +47,8 @@ export const UpdateLinkInBioProfileSchema = z.object({
   bio: z.string().max(500).nullable().optional(),
   theme: z.string().max(50).default('true-fans'),
   background: z.object({
-    type: z.enum(['color', 'gradient', 'image', 'video']),
-    value: z.string().nullable(),
+    type: z.enum(['color', 'gradient', 'image', 'video', 'none']).optional(),
+    value: z.string().nullable().optional(),
   }).nullable().optional(),
   customColors: z.any().nullable().optional(),
   customFont: z.string().max(100).nullable().optional(),
@@ -77,7 +79,7 @@ export type TrackView = z.infer<typeof TrackViewSchema>;
 
 // Track click schema
 export const TrackClickSchema = z.object({
-  linkId: z.string().uuid('Invalid link ID'),
+  linkId: z.string(),
   username: z.string(),
   deviceType: z.enum(['mobile', 'desktop', 'tablet']).nullable().optional(),
 });

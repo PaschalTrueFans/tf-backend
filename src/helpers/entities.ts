@@ -25,12 +25,14 @@ export interface User extends DefaultTable {
   categoryId?: string;
   isVerified?: boolean;
   isBlocked: boolean;
+  role?: 'creator' | 'member';
 }
 
 export interface Admin extends DefaultTable {
   email: string;
   password: string;
   name: string;
+  role?: string;
 }
 
 export type TicketStatus = 'open' | 'in_progress' | 'completed';
@@ -99,6 +101,7 @@ export interface Post extends DefaultTable {
   accessType: string; // 'free' | 'paid' (or membership-based)
   tags?: string[] | null;
   totalLikes: number;
+  mediaFiles?: PostMediaFile[] | null;
 }
 
 export interface PostMediaFile extends DefaultTable {
@@ -223,6 +226,8 @@ export interface Message extends DefaultTable {
   conversationId: string;
   senderId: string;
   content: string;
+  isRead?: boolean;
+  readAt?: Date;
 }
 
 export interface Notification extends DefaultTable {
@@ -248,4 +253,25 @@ export interface GroupInvite extends DefaultTable {
 export interface PeopleInterested extends DefaultTable {
   userId: string;
   eventId: string;
+}
+
+export interface LinkInBioProfile extends DefaultTable {
+  userId: string;
+  username: string;
+  displayName?: string;
+  profileImage?: string;
+  coverImage?: string;
+  bio?: string;
+  theme?: string;
+  backgroundType?: string;
+  backgroundValue?: string;
+  customColors?: any;
+  customFont?: string;
+  showLatestPosts?: boolean;
+  isPublished?: boolean;
+  customSlug?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  links?: any[];
+  socialLinks?: any;
 }

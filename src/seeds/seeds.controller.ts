@@ -13,8 +13,11 @@ export class SeedsController {
   }
 
   public async initSeeds() {
+    // Connection should be established before calling this in server context
+    // await this.db.Init(); 
     await this.runSeeds();
-    this.db.DisconnectDb();
+    // Do not disconnect, as server needs to stay alive
+    // await this.db.DisconnectDb();
   }
 
   private async runSeeds() {

@@ -38,6 +38,7 @@ export const Database = {
   DB_PASSWORD: Process.env.DB_PASSWORD as string,
   DB_HOST: Process.env.DB_HOST as string,
   MIGRATOR_DB_HOST: Process.env.MIGRATOR_DB_HOST as string,
+  MONGO_URI: Process.env.MONGO_URI as string,
 };
 
 export const Swagger = {
@@ -70,6 +71,8 @@ export const Stripe = {
   WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET as string,
 };
 
+
+
 export const ENV = {
   Server,
   Jwt,
@@ -79,4 +82,6 @@ export const ENV = {
   AWS,
   FrontEndLink,
   Stripe,
+  SMTP,
+  Hash,
 };

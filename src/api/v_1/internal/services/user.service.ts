@@ -188,7 +188,7 @@ export class UserService {
         introVideo: creator.introVideo,
         themeColor: creator.themeColor,
         socialLinks: creator.socialLinks,
-        isFollowing: creator.isfollowing,
+        isFollowing: creator.isFollowing,
         followersCount: parseInt(creator.followersCount) || 0,
         tags: creator.tags,
         category: creator.category,
@@ -229,7 +229,7 @@ export class UserService {
       socialLinks: creator.socialLinks,
       tags: creator.tags,
       categoryId: creator.categoryId,
-      isFollowing: creator.isfollowing,
+      isFollowing: creator.isFollowing,
       isSubscribed: creator.isSubscriber,
       createdAt: creator.createdAt,
       updatedAt: creator.updatedAt,
@@ -283,7 +283,7 @@ export class UserService {
       socialLinks: creator.socialLinks,
       tags: creator.tags,
       categoryId: creator.categoryId,
-      isFollowing: creator.isfollowing,
+      isFollowing: creator.isFollowing,
       isSubscribed: creator.isSubscriber,
       createdAt: creator.createdAt,
       updatedAt: creator.updatedAt,
@@ -321,7 +321,9 @@ export class UserService {
       throw new BadRequest('Cannot follow yourself');
     }
 
+    Logger.debug('UserService.ToggleFollowCreator - Calling DB ToggleFollowUser', { userId, followerId });
     const result = await this.db.v1.User.ToggleFollowUser(userId, followerId);
+    Logger.debug('UserService.ToggleFollowCreator - DB Result', result);
 
     // Create notification for creator when someone follows them
     if (result.action === 'followed') {
@@ -470,6 +472,71 @@ export class UserService {
 
     // Calculate pagination metadata
     const totalPosts = allPosts.length;
+    const totalPages = Math.ceil(totalPosts / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    const posts = paginatedPosts.map((r: any) => ({
+      postId: r.postId,
+      postTitle: r.postTitle,
+      content: this.stripHtmlAndTruncate(r.content, 100),
+      createdAt: r.createdAt,
+      tags: r.tags || [],
+      attachedMedia: r.attachedMedia || [],
+      creatorId: r.creatorId,
+      creatorImage: r.creatorImage,
+      pageName: r.pageName,
+      totalLikes: parseInt(r.totalLikes) || 0,
+      totalComments: parseInt(r.totalComments) || 0,
+      isLiked: r.isLiked || false,
+    }));
+
+    return {
+      posts,
+      pagination: {
+        currentPage: page,
+        limit,
+        totalPosts,
+        totalPages,
+        hasNextPage,
+        hasPrevPage,
+      },
+    };
+  }
+
+  public async GetFollowingFeed(userId: string, page: number = 1, limit: number = 10): Promise<{
+    posts: any[];
+    pagination: {
+      currentPage: number;
+      limit: number;
+      totalPosts: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    };
+  }> {
+    Logger.info('UserService.GetFollowingFeed', { userId, page, limit });
+
+    // 1. Paid Posts membership based
+    const paidPosts = await this.db.v1.User.GetAllPaidPostsByMembershipCreators(userId, page, limit);
+
+    // 2. Posts by followed creators
+    const followedPosts = await this.db.v1.User.GetAllPostsByFollowedCreator(userId, page, limit);
+
+    const allPosts = [...paidPosts, ...followedPosts];
+    // Remove duplicates if any
+    const uniquePosts = Array.from(new Map(allPosts.map(item => [item['postId'], item])).values());
+
+    // Re-sort combined list by creation date
+    uniquePosts.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply pagination to combined results
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedPosts = uniquePosts.slice(startIndex, endIndex);
+
+    // Calculate pagination metadata
+    const totalPosts = uniquePosts.length;
     const totalPages = Math.ceil(totalPosts / limit);
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;

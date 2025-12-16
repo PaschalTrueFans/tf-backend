@@ -13,7 +13,7 @@ class App {
   constructor() {
     this.app = express();
     this.middlewares();
-    this.seedMiddlewares();
+
     this.routes();
   }
   public app: express.Application;
@@ -27,26 +27,15 @@ class App {
     this.app.use(Swagger.PATH + '/v_1', SwaggerUI.serve, SwaggerUI.setup(SwaggerDocs));
 
     this.app.use((req, res, next) => {
-      const db = new Db();
-      res.locals.db = db;
-      res.on('finish', async () => {
-        Logger.info('Request processing finished');
-        if (db) {
-          Logger.debug('Data connection closed');
-          await db.DisconnectDb();
-        }
-      });
+      // Use the singleton Db instance, don't create a new one per request
+      // MongoDB connections should persist throughout the app lifecycle
+      res.locals.db = Db.Instance;
       next();
     });
     Logger.info('Middlewares are initialized successfully...');
   }
 
-  private async seedMiddlewares(): Promise<void> {
-    Logger.info('Seed Middlewares are being initialized...');
-    const Seeds = new SeedsController();
-    await Seeds.initSeeds();
-    Logger.info('Middlewares are initialized successfully...');
-  }
+
 
   private routes(): void {
     Logger.info('Routes are being initialized...');

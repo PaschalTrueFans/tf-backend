@@ -81,6 +81,7 @@ export class LinkInBioController {
   ): Promise<void> => {
     let body;
     try {
+      Logger.info('LinkInBioController.updateProfile', { body: req.body, links: req.body.links });
       // Validate request body
       await LinkInBioModel.UpdateLinkInBioProfileSchema.parseAsync(req.body);
 

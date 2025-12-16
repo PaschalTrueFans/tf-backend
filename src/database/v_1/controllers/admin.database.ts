@@ -1,64 +1,47 @@
-import { Knex } from 'knex';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Entities } from '../../../helpers';
 import { AppError } from '../../../helpers/errors';
 import { Logger } from '../../../helpers/logger';
-import { Entities } from '../../../helpers';
+import {
+  AdminModel,
+  TicketModel,
+  TicketCommentModel,
+  SystemNotificationModel,
+  EmailBroadcastModel,
+  SettingsModel
+} from '../../models/Admin';
+import { UserModel } from '../../models/User';
+import { TransactionModel } from '../../models/Other';
 
-type QueryRunner = (query: Knex.QueryBuilder) => Promise<{ res?: any[]; err: unknown }>;
 
 export class AdminDatabase {
   private logger = Logger;
 
-  private GetKnex: () => Knex;
-
-  private RunQuery: QueryRunner;
-
-  constructor(args: { GetKnex: () => Knex; RunQuery: QueryRunner }) {
-    this.GetKnex = args.GetKnex;
-    this.RunQuery = args.RunQuery;
+  constructor(args: any) {
   }
 
   async GetAdmin(where: Partial<Entities.Admin>): Promise<Entities.Admin | null> {
-    this.logger.info('Db.GetAdmin', { where });
+    const query: any = { ...where };
+    // Check if 'id' key exists in the query object
+    if ('id' in query) {
+      // If id is falsy (undefined, null, empty) or the string 'undefined', return null immediately
+      if (!query.id || query.id === 'undefined') return null;
 
-    const knexdb = this.GetKnex();
-
-    const query = knexdb('admin').where(where);
-
-    const { res, err } = await this.RunQuery(query);
-
-    if (err) {
-      this.logger.error('Db.GetAdmin failed', err);
-      throw new AppError(400, 'Admin not found');
+      query._id = query.id;
+      delete query.id;
     }
-
-    if (!res || res.length === 0) {
-      this.logger.info('Db.GetAdmin Admin not found');
-      return null;
-    }
-
-    return res[0] as Entities.Admin;
+    const admin = await AdminModel.findOne(query).lean();
+    if (!admin) return null;
+    // Return lean document with password included, manually add id
+    return {
+      ...admin,
+      id: admin._id.toString()
+    } as any as Entities.Admin;
   }
 
   async CreateAdmin(admin: Partial<Entities.Admin>): Promise<Entities.Admin> {
-    this.logger.info('Db.CreateAdmin', { admin });
-
-    const knexdb = this.GetKnex();
-
-    const query = knexdb('admin').insert(admin);
-
-    const { res, err } = await this.RunQuery(query);
-
-    if (err) {
-      this.logger.error('Db.CreateAdmin failed', err);
-      throw new AppError(400, 'Admin not created');
-    }
-
-    if (!res || res.length === 0) {
-      this.logger.info('Db.CreateAdmin Admin not created');
-      throw new AppError(400, 'Admin not created');
-    }
-
-    return res[0] as Entities.Admin;
+    const newAdmin = await AdminModel.create(admin);
+    return newAdmin.toJSON() as Entities.Admin;
   }
 
   async GetTransactionsWithFilters(params: {
@@ -66,83 +49,43 @@ export class AdminDatabase {
     limit?: number;
     search?: string;
     status?: string;
-  }): Promise<{
-    transactions: Array<{
-      id: string;
-      amount: string;
-      status: string;
-      createdAt: string;
-      userId: string;
-      userName: string | null;
-      userEmail: string | null;
-    }>;
-    total: number;
-  }> {
+  }): Promise<{ transactions: any[]; total: number }> {
     const { page = 1, limit = 10, search, status } = params;
+    const query: any = {};
 
-    this.logger.info('Db.GetTransactionsWithFilters', { page, limit, search, status });
+    if (status) query.status = status;
+    // Search in user name/email requires lookup which is hard for simple find queries unless aggregated.
+    // For now simple implementation:
 
-    const knexdb = this.GetKnex();
-
-    const baseQuery = knexdb('transactions as t')
-      .leftJoin('users as u', 't.subscriberId', 'u.id');
-
+    let userIds: string[] = [];
     if (search) {
-      baseQuery.andWhere(function () {
-        this.whereILike('u.name', `%${search}%`).orWhereILike('u.email', `%${search}%`);
-      });
+      const users = await UserModel.find({
+        $or: [{ name: { $regex: search, $options: 'i' } }, { email: { $regex: search, $options: 'i' } }]
+      }).select('_id');
+      userIds = users.map(u => u._id.toString());
+      query.subscriberId = { $in: userIds };
     }
 
-    if (status) {
-      baseQuery.andWhere('t.status', status);
-    }
-
-    const transactionsQuery = baseQuery
-      .clone()
-      .select([
-        't.id',
-        't.amount',
-        't.status',
-        't.createdAt',
-        'u.id as userId',
-        'u.name as userName',
-        'u.email as userEmail',
-      ])
-      .orderBy('t.createdAt', 'desc')
+    const transactions: any[] = await TransactionModel.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
       .limit(limit)
-      .offset((page - 1) * limit);
+      .populate('subscriberId', 'name email')
+      .lean();
 
-    const countQuery = baseQuery.clone().clearSelect().clearOrder().count({ total: 't.id' });
+    const total = await TransactionModel.countDocuments(query);
 
-    const [{ res: transactionsRes, err: transactionsErr }, { res: countRes, err: countErr }] = await Promise.all([
-      this.RunQuery(transactionsQuery),
-      this.RunQuery(countQuery),
-    ]);
+    const formatted = transactions.map((t: any) => ({
+      id: t._id.toString(),
+      amount: t.amount,
+      status: t.status,
+      createdAt: t.createdAt,
+      userId: t.subscriberId?._id?.toString() || t.subscriberId, // Handle populated vs unpopulated
+      userName: t.subscriberId?.name,
+      userEmail: t.subscriberId?.email
+    }));
 
-    if (transactionsErr) {
-      this.logger.error('Db.GetTransactionsWithFilters failed fetching transactions', transactionsErr);
-      throw new AppError(400, 'Failed to fetch transactions');
-    }
-
-    if (countErr) {
-      this.logger.error('Db.GetTransactionsWithFilters failed counting transactions', countErr);
-      throw new AppError(400, 'Failed to fetch transactions count');
-    }
-
-    const total = parseInt(countRes?.[0]?.total ?? '0', 10);
-
-    return {
-      transactions: (transactionsRes ?? []) as Array<{
-        id: string;
-        amount: string;
-        status: string;
-        createdAt: string;
-        userId: string;
-        userName: string | null;
-        userEmail: string | null;
-      }>,
-      total,
-    };
+    return { transactions: formatted, total };
   }
 
   async GetTicketsWithFilters(params: {
@@ -151,451 +94,155 @@ export class AdminDatabase {
     search?: string;
     status?: Entities.TicketStatus;
     ticketId?: string;
-  }): Promise<{
-    tickets: Array<{
-      id: string;
-      subject: string;
-      message: string;
-      status: Entities.TicketStatus;
-      createdAt: string;
-      updatedAt: string;
-      userId: string;
-      userName: string | null;
-      userEmail: string | null;
-      comments: Array<{
-        id: string;
-        ticketId: string;
-        comment: string;
-        adminId: string | null;
-        adminName: string | null;
-        createdAt: string;
-      }>;
-    }>;
-    total: number;
-  }> {
+  }): Promise<{ tickets: any[]; total: number }> {
     const { page = 1, limit = 10, search, status, ticketId } = params;
 
-    this.logger.info('Db.GetTicketsWithFilters', { page, limit, search, status });
-
-    const knexdb = this.GetKnex();
-
-    const baseQuery = knexdb('tickets as t')
-      .leftJoin('users as u', 't.userId', 'u.id');
-
-    if (ticketId) {
-      baseQuery.andWhere('t.id', ticketId);
-    }
+    const query: any = {};
+    if (ticketId) query._id = ticketId;
+    if (status) query.status = status;
 
     if (search) {
-      baseQuery.andWhere(function () {
-        this.whereILike('t.subject', `%${search}%`)
-          .orWhereILike('u.email', `%${search}%`)
-          .orWhereILike('u.name', `%${search}%`);
-      });
+      // Search ticket subject or User
+      const users = await UserModel.find({
+        $or: [{ name: { $regex: search, $options: 'i' } }, { email: { $regex: search, $options: 'i' } }]
+      }).select('_id');
+      const userIds = users.map(u => u._id.toString());
+
+      query.$or = [
+        { subject: { $regex: search, $options: 'i' } },
+        { userId: { $in: userIds } }
+      ];
     }
 
-    if (status) {
-      baseQuery.andWhere('t.status', status);
-    }
+    const tickets: any[] = await TicketModel.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('userId', 'name email')
+      .lean();
 
-    const ticketsQuery = baseQuery
-      .clone()
-      .select([
-        't.id',
-        't.subject',
-        't.message',
-        't.status',
-        't.createdAt',
-        't.updatedAt',
-        'u.id as userId',
-        'u.name as userName',
-        'u.email as userEmail',
-      ])
-      .orderBy('t.createdAt', 'desc')
-      .modify((qb) => {
-        if (!ticketId) {
-          qb.limit(limit).offset((page - 1) * limit);
-        }
-      });
+    const total = await TicketModel.countDocuments(query);
 
-    const countQuery = baseQuery
-      .clone()
-      .clearSelect()
-      .clearOrder()
-      .countDistinct({ total: 't.id' });
+    // Populate comments manually or via virtuals
+    const enriched = await Promise.all(tickets.map(async (t: any) => {
+      const comments = await TicketCommentModel.find({ ticketId: t._id })
+        .sort({ createdAt: 1 })
+        .populate('adminId', 'name') // Assuming adminId refs User/Admin
+        .lean();
 
-    const [{ res: ticketsRes, err: ticketsErr }, { res: countRes, err: countErr }] = await Promise.all([
-      this.RunQuery(ticketsQuery),
-      this.RunQuery(countQuery),
-    ]);
+      return {
+        id: t._id.toString(),
+        subject: t.subject,
+        message: t.message,
+        status: t.status,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+        userId: t.userId?._id?.toString(),
+        userName: t.userId?.name,
+        userEmail: t.userId?.email,
+        comments: comments.map((c: any) => ({
+          id: c._id.toString(),
+          ticketId: c.ticketId.toString(),
+          comment: c.comment,
+          adminId: c.adminId?._id?.toString(),
+          adminName: c.adminId?.name,
+          createdAt: c.createdAt
+        }))
+      };
+    }));
 
-    if (ticketsErr) {
-      this.logger.error('Db.GetTicketsWithFilters failed fetching tickets', ticketsErr);
-      throw new AppError(400, 'Failed to fetch tickets');
-    }
-
-    if (countErr) {
-      this.logger.error('Db.GetTicketsWithFilters failed counting tickets', countErr);
-      throw new AppError(400, 'Failed to fetch tickets count');
-    }
-
-    const tickets = (ticketsRes ?? []) as Array<{
-      id: string;
-      subject: string;
-      message: string;
-      status: Entities.TicketStatus;
-      createdAt: string;
-      updatedAt: string;
-      userId: string;
-      userName: string | null;
-      userEmail: string | null;
-    }>;
-
-    const ticketIds = tickets.map((ticket) => ticket.id);
-
-    let commentsByTicketId: Record<
-      string,
-      Array<{
-        id: string;
-        ticketId: string;
-        comment: string;
-        adminId: string | null;
-        adminName: string | null;
-        createdAt: string;
-      }>
-    > = {};
-
-    if (ticketIds.length > 0) {
-      const commentsQuery = knexdb('ticketComments as tc')
-        .leftJoin('admin as a', 'tc.adminId', 'a.id')
-        .select([
-          'tc.id',
-          'tc.ticketId',
-          'tc.comment',
-          'tc.adminId',
-          'a.name as adminName',
-          'tc.createdAt',
-        ])
-        .whereIn('tc.ticketId', ticketIds)
-        .orderBy('tc.createdAt', 'asc');
-
-      const { res: commentsRes, err: commentsErr } = await this.RunQuery(commentsQuery);
-
-      if (commentsErr) {
-        this.logger.error('Db.GetTicketsWithFilters failed fetching comments', commentsErr);
-        throw new AppError(400, 'Failed to fetch ticket comments');
-      }
-
-      commentsByTicketId = (commentsRes ?? []).reduce<
-        Record<
-          string,
-          Array<{
-            id: string;
-            ticketId: string;
-            comment: string;
-            adminId: string | null;
-            adminName: string | null;
-            createdAt: string;
-          }>
-        >
-      >((acc, comment) => {
-        if (!acc[comment.ticketId]) acc[comment.ticketId] = [];
-        acc[comment.ticketId].push(comment);
-        return acc;
-      }, {});
-    }
-
-    const total = ticketId ? tickets.length : parseInt(countRes?.[0]?.total ?? '0', 10);
-
-    return {
-      tickets: tickets.map((ticket) => ({
-        ...ticket,
-        comments: commentsByTicketId[ticket.id] ?? [],
-      })),
-      total,
-    };
+    return { tickets: enriched, total };
   }
 
   async CreateTicketComment(args: {
     ticketId: string;
     adminId: string | null;
     comment: string;
-  }): Promise<{
-    id: string;
-    ticketId: string;
-    comment: string;
-    adminId: string | null;
-    adminName: string | null;
-    createdAt: string;
-  }> {
-    const knexdb = this.GetKnex();
+  }): Promise<any> {
+    const comment = await TicketCommentModel.create(args);
+    // Populate admin
+    await comment.populate('adminId', 'name');
+    const c: any = comment.toJSON();
 
-    const insertQuery = knexdb('ticketComments').insert(
-      {
-        ticketId: args.ticketId,
-        adminId: args.adminId,
-        comment: args.comment,
-      },
-      ['id'],
-    );
-
-    const { res, err } = await this.RunQuery(insertQuery);
-
-    if (err) {
-      this.logger.error('Db.CreateTicketComment failed', err);
-      throw new AppError(400, 'Failed to add ticket comment');
-    }
-
-    if (!res || res.length === 0) {
-      throw new AppError(400, 'Failed to add ticket comment');
-    }
-
-    const commentId = res[0].id as string;
-
-    const fetchQuery = knexdb('ticketComments as tc')
-      .leftJoin('admin as a', 'tc.adminId', 'a.id')
-      .select([
-        'tc.id',
-        'tc.ticketId',
-        'tc.comment',
-        'tc.adminId',
-        'a.name as adminName',
-        'tc.createdAt',
-      ])
-      .where('tc.id', commentId);
-
-    const { res: commentRes, err: commentErr } = await this.RunQuery(fetchQuery);
-
-    if (commentErr) {
-      this.logger.error('Db.CreateTicketComment failed fetching comment', commentErr);
-      throw new AppError(400, 'Failed to fetch ticket comment');
-    }
-
-    if (!commentRes || commentRes.length === 0) {
-      throw new AppError(400, 'Failed to fetch ticket comment');
-    }
-
-    return commentRes[0] as {
-      id: string;
-      ticketId: string;
-      comment: string;
-      adminId: string | null;
-      adminName: string | null;
-      createdAt: string;
+    return {
+      id: c.id,
+      ticketId: c.ticketId,
+      comment: c.comment,
+      adminId: c.adminId?.id,
+      adminName: c.adminId?.name,
+      createdAt: c.createdAt
     };
   }
 
   async UpdateTicketStatus(ticketId: string, status: Entities.TicketStatus): Promise<Entities.Ticket | null> {
-    const knexdb = this.GetKnex();
-
-    const updateQuery = knexdb('tickets')
-      .where({ id: ticketId })
-      .update({ status, updatedAt: knexdb.fn.now() })
-      .returning('*');
-
-    const { res, err } = await this.RunQuery(updateQuery);
-
-    if (err) {
-      this.logger.error('Db.UpdateTicketStatus failed', err);
-      throw new AppError(400, 'Failed to update ticket status');
-    }
-
-    if (!res || res.length === 0) {
-      return null;
-    }
-
-    return res[0] as Entities.Ticket;
+    const t = await TicketModel.findByIdAndUpdate(ticketId, { status }, { new: true });
+    return t as unknown as Entities.Ticket;
   }
 
   async CreateSystemNotification(notification: {
     title: string;
     message: string;
     adminId: string | null;
-  }): Promise<{
-    id: string;
-  }> {
-    const knexdb = this.GetKnex();
-
-    const insertQuery = knexdb('systemNotifications').insert(notification, ['id']);
-
-    const { res, err } = await this.RunQuery(insertQuery);
-
-    if (err) {
-      this.logger.error('Db.CreateSystemNotification failed', err);
-      throw new AppError(400, 'Failed to create system notification');
-    }
-
-    if (!res || res.length === 0) {
-      throw new AppError(400, 'Failed to create system notification');
-    }
-
-    return { id: res[0].id as string };
+  }): Promise<{ id: string }> {
+    const n = await SystemNotificationModel.create(notification);
+    return { id: n._id.toString() };
   }
 
   async GetSystemNotifications(params: {
     page?: number;
     limit?: number;
     search?: string;
-  }): Promise<{
-    notifications: Array<{
-      id: string;
-      title: string;
-      message: string;
-      adminId: string | null;
-      adminName: string | null;
-      createdAt: string;
-      updatedAt: string;
-    }>;
-    total: number;
-  }> {
+  }): Promise<{ notifications: any[]; total: number }> {
     const { page = 1, limit = 10, search } = params;
-
-    this.logger.info('Db.GetSystemNotifications', { page, limit, search });
-
-    const knexdb = this.GetKnex();
-
-    const baseQuery = knexdb('systemNotifications as sn')
-      .leftJoin('admin as a', 'sn.adminId', 'a.id');
-
+    const query: any = {};
     if (search) {
-      baseQuery.andWhere(function () {
-        this.whereILike('sn.title', `%${search}%`).orWhereILike('sn.message', `%${search}%`);
-      });
+      query.$or = [{ title: { $regex: search, $options: 'i' } }, { message: { $regex: search, $options: 'i' } }];
     }
 
-    const notificationsQuery = baseQuery
-      .clone()
-      .select([
-        'sn.id',
-        'sn.title',
-        'sn.message',
-        'sn.adminId',
-        'a.name as adminName',
-        'sn.createdAt',
-        'sn.updatedAt',
-      ])
-      .orderBy('sn.createdAt', 'desc')
-      .limit(limit)
-      .offset((page - 1) * limit);
-
-    const countQuery = baseQuery.clone().clearSelect().clearOrder().count({ total: 'sn.id' });
-
-    const [{ res: notificationsRes, err: notificationsErr }, { res: countRes, err: countErr }] = await Promise.all([
-      this.RunQuery(notificationsQuery),
-      this.RunQuery(countQuery),
+    const [notifications, total] = await Promise.all([
+      SystemNotificationModel.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('adminId', 'name')
+        .lean() as unknown as Promise<any[]>,
+      SystemNotificationModel.countDocuments(query)
     ]);
 
-    if (notificationsErr) {
-      this.logger.error('Db.GetSystemNotifications failed fetching notifications', notificationsErr);
-      throw new AppError(400, 'Failed to fetch system notifications');
-    }
-
-    if (countErr) {
-      this.logger.error('Db.GetSystemNotifications failed counting notifications', countErr);
-      throw new AppError(400, 'Failed to fetch system notifications count');
-    }
-
-    const total = parseInt(countRes?.[0]?.total ?? '0', 10);
-
     return {
-      notifications: (notificationsRes ?? []) as Array<{
-        id: string;
-        title: string;
-        message: string;
-        adminId: string | null;
-        adminName: string | null;
-        createdAt: string;
-        updatedAt: string;
-      }>,
-      total,
+      notifications: notifications.map((n: any) => ({
+        id: n._id.toString(),
+        title: n.title,
+        message: n.message,
+        adminId: n.adminId?._id?.toString(),
+        adminName: n.adminId?.name,
+        createdAt: n.createdAt,
+        updatedAt: n.updatedAt
+      })),
+      total
     };
   }
 
-  async UpdateSystemNotification(
-    id: string,
-    data: Partial<Entities.SystemNotification>,
-  ): Promise<Entities.SystemNotification | null> {
-    const knexdb = this.GetKnex();
-
-    const updateData = {
-      ...data,
-      updatedAt: knexdb.fn.now(),
-    };
-
-    const updateQuery = knexdb('systemNotifications').where({ id }).update(updateData).returning('*');
-
-    const { res, err } = await this.RunQuery(updateQuery);
-
-    if (err) {
-      this.logger.error('Db.UpdateSystemNotification failed', err);
-      throw new AppError(400, 'Failed to update system notification');
-    }
-
-    if (!res || res.length === 0) {
-      return null;
-    }
-
-    return res[0] as Entities.SystemNotification;
+  async UpdateSystemNotification(id: string, data: Partial<Entities.SystemNotification>): Promise<Entities.SystemNotification | null> {
+    const n = await SystemNotificationModel.findByIdAndUpdate(id, data, { new: true });
+    return n as unknown as Entities.SystemNotification;
   }
 
   async DeleteSystemNotification(id: string): Promise<void> {
-    const knexdb = this.GetKnex();
-
-    const deleteQuery = knexdb('systemNotifications').where({ id }).del();
-
-    const { err } = await this.RunQuery(deleteQuery);
-
-    if (err) {
-      this.logger.error('Db.DeleteSystemNotification failed', err);
-      throw new AppError(400, 'Failed to delete system notification');
-    }
+    await SystemNotificationModel.findByIdAndDelete(id);
   }
 
-  async GetSystemNotificationById(
-    id: string,
-  ): Promise<{
-    id: string;
-    title: string;
-    message: string;
-    adminId: string | null;
-    adminName: string | null;
-    createdAt: string;
-    updatedAt: string;
-  } | null> {
-    const knexdb = this.GetKnex();
-
-    const query = knexdb('systemNotifications as sn')
-      .leftJoin('admin as a', 'sn.adminId', 'a.id')
-      .select([
-        'sn.id',
-        'sn.title',
-        'sn.message',
-        'sn.adminId',
-        'a.name as adminName',
-        'sn.createdAt',
-        'sn.updatedAt',
-      ])
-      .where('sn.id', id);
-
-    const { res, err } = await this.RunQuery(query);
-
-    if (err) {
-      this.logger.error('Db.GetSystemNotificationById failed', err);
-      throw new AppError(400, 'Failed to fetch system notification');
-    }
-
-    if (!res || res.length === 0) {
-      return null;
-    }
-
-    return res[0] as {
-      id: string;
-      title: string;
-      message: string;
-      adminId: string | null;
-      adminName: string | null;
-      createdAt: string;
-      updatedAt: string;
+  async GetSystemNotificationById(id: string): Promise<any | null> {
+    const n = await SystemNotificationModel.findById(id).populate('adminId', 'name').lean() as any;
+    if (!n) return null;
+    return {
+      id: n._id.toString(),
+      title: n.title,
+      message: n.message,
+      adminId: n.adminId?._id?.toString(),
+      adminName: n.adminId?.name,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt
     };
   }
 
@@ -605,80 +252,22 @@ export class AdminDatabase {
     adminId: string | null;
     recipientCount: number;
   }): Promise<{ id: string }> {
-    const knexdb = this.GetKnex();
-
-    const insertQuery = knexdb('emailBroadcasts').insert(
-      {
-        subject: args.subject,
-        message: args.message,
-        adminId: args.adminId,
-        recipientCount: args.recipientCount,
-      },
-      ['id'],
-    );
-
-    const { res, err } = await this.RunQuery(insertQuery);
-
-    if (err) {
-      this.logger.error('Db.CreateEmailBroadcast failed', err);
-      throw new AppError(400, 'Failed to create email broadcast');
-    }
-
-    if (!res || res.length === 0) {
-      throw new AppError(400, 'Failed to create email broadcast');
-    }
-
-    return { id: res[0].id as string };
+    const b = await EmailBroadcastModel.create(args);
+    return { id: b._id.toString() };
   }
 
-  async GetEmailBroadcastById(
-    id: string,
-  ): Promise<{
-    id: string;
-    subject: string;
-    message: string;
-    recipientCount: number;
-    adminId: string | null;
-    adminName: string | null;
-    createdAt: string;
-    updatedAt: string;
-  } | null> {
-    const knexdb = this.GetKnex();
-
-    const query = knexdb('emailBroadcasts as eb')
-      .leftJoin('admin as a', 'eb.adminId', 'a.id')
-      .select([
-        'eb.id',
-        'eb.subject',
-        'eb.message',
-        'eb.recipientCount',
-        'eb.adminId',
-        'a.name as adminName',
-        'eb.createdAt',
-        'eb.updatedAt',
-      ])
-      .where('eb.id', id);
-
-    const { res, err } = await this.RunQuery(query);
-
-    if (err) {
-      this.logger.error('Db.GetEmailBroadcastById failed', err);
-      throw new AppError(400, 'Failed to fetch email broadcast');
-    }
-
-    if (!res || res.length === 0) {
-      return null;
-    }
-
-    return res[0] as {
-      id: string;
-      subject: string;
-      message: string;
-      recipientCount: number;
-      adminId: string | null;
-      adminName: string | null;
-      createdAt: string;
-      updatedAt: string;
+  async GetEmailBroadcastById(id: string): Promise<any | null> {
+    const b = await EmailBroadcastModel.findById(id).populate('adminId', 'name').lean() as any;
+    if (!b) return null;
+    return {
+      id: b._id.toString(),
+      subject: b.subject,
+      message: b.message,
+      recipientCount: b.recipientCount,
+      adminId: b.adminId?._id?.toString(),
+      adminName: b.adminId?.name,
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt
     };
   }
 
@@ -686,174 +275,45 @@ export class AdminDatabase {
     page?: number;
     limit?: number;
     search?: string;
-  }): Promise<{
-    broadcasts: Array<{
-      id: string;
-      subject: string;
-      message: string;
-      recipientCount: number;
-      adminId: string | null;
-      adminName: string | null;
-      createdAt: string;
-      updatedAt: string;
-    }>;
-    total: number;
-  }> {
+  }): Promise<{ broadcasts: any[]; total: number }> {
     const { page = 1, limit = 10, search } = params;
-
-    this.logger.info('Db.GetEmailBroadcasts', { page, limit, search });
-
-    const knexdb = this.GetKnex();
-
-    const baseQuery = knexdb('emailBroadcasts as eb')
-      .leftJoin('admin as a', 'eb.adminId', 'a.id');
-
+    const query: any = {};
     if (search) {
-      baseQuery.andWhere(function () {
-        this.whereILike('eb.subject', `%${search}%`).orWhereILike('eb.message', `%${search}%`);
-      });
+      query.$or = [{ subject: { $regex: search, $options: 'i' } }, { message: { $regex: search, $options: 'i' } }];
     }
 
-    const broadcastsQuery = baseQuery
-      .clone()
-      .select([
-        'eb.id',
-        'eb.subject',
-        'eb.message',
-        'eb.recipientCount',
-        'eb.adminId',
-        'a.name as adminName',
-        'eb.createdAt',
-        'eb.updatedAt',
-      ])
-      .orderBy('eb.createdAt', 'desc')
-      .limit(limit)
-      .offset((page - 1) * limit);
-
-    const countQuery = baseQuery.clone().clearSelect().clearOrder().count({ total: 'eb.id' });
-
-    const [{ res: broadcastsRes, err: broadcastsErr }, { res: countRes, err: countErr }] = await Promise.all([
-      this.RunQuery(broadcastsQuery),
-      this.RunQuery(countQuery),
+    const [broadcasts, total] = await Promise.all([
+      EmailBroadcastModel.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('adminId', 'name')
+        .lean() as unknown as Promise<any[]>,
+      EmailBroadcastModel.countDocuments(query)
     ]);
 
-    if (broadcastsErr) {
-      this.logger.error('Db.GetEmailBroadcasts failed fetching broadcasts', broadcastsErr);
-      throw new AppError(400, 'Failed to fetch email broadcasts');
-    }
-
-    if (countErr) {
-      this.logger.error('Db.GetEmailBroadcasts failed counting broadcasts', countErr);
-      throw new AppError(400, 'Failed to fetch email broadcasts count');
-    }
-
-    const total = parseInt(countRes?.[0]?.total ?? '0', 10);
-
     return {
-      broadcasts: (broadcastsRes ?? []) as Array<{
-        id: string;
-        subject: string;
-        message: string;
-        recipientCount: number;
-        adminId: string | null;
-        adminName: string | null;
-        createdAt: string;
-        updatedAt: string;
-      }>,
-      total,
+      broadcasts: broadcasts.map((b: any) => ({
+        id: b._id.toString(),
+        subject: b.subject,
+        message: b.message,
+        recipientCount: b.recipientCount,
+        adminId: b.adminId?._id?.toString(),
+        adminName: b.adminId?.name,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt
+      })),
+      total
     };
   }
 
-  async GetSettings(): Promise<{
-    id: string;
-    platformFee: string;
-    createdAt: string;
-    updatedAt: string;
-  } | null> {
-    this.logger.info('Db.GetSettings');
-
-    const knexdb = this.GetKnex();
-
-    const query = knexdb('settings').orderBy('createdAt', 'desc').limit(1);
-
-    const { res, err } = await this.RunQuery(query);
-
-    if (err) {
-      this.logger.error('Db.GetSettings failed', err);
-      throw new AppError(400, 'Failed to fetch settings');
-    }
-
-    if (!res || res.length === 0) {
-      return null;
-    }
-
-    return res[0] as {
-      id: string;
-      platformFee: string;
-      createdAt: string;
-      updatedAt: string;
-    };
+  async GetSettings(): Promise<any | null> {
+    const s = await SettingsModel.findOne().sort({ createdAt: -1 });
+    return s ? s.toJSON() : null;
   }
 
-  async UpdateSettings(platformFee: string): Promise<{
-    id: string;
-    platformFee: string;
-    createdAt: string;
-    updatedAt: string;
-  }> {
-    this.logger.info('Db.UpdateSettings', { platformFee });
-
-    const knexdb = this.GetKnex();
-
-    // Check if settings exist
-    const existingSettings = await this.GetSettings();
-
-    if (existingSettings) {
-      // Update existing settings
-      const updateQuery = knexdb('settings')
-        .where({ id: existingSettings.id })
-        .update({ platformFee, updatedAt: knexdb.fn.now() })
-        .returning('*');
-
-      const { res, err } = await this.RunQuery(updateQuery);
-
-      if (err) {
-        this.logger.error('Db.UpdateSettings failed', err);
-        throw new AppError(400, 'Failed to update settings');
-      }
-
-      if (!res || res.length === 0) {
-        throw new AppError(400, 'Failed to update settings');
-      }
-
-      return res[0] as {
-        id: string;
-        platformFee: string;
-        createdAt: string;
-        updatedAt: string;
-      };
-    } else {
-      // Create new settings if none exist
-      const insertQuery = knexdb('settings').insert({ platformFee }, ['*']);
-
-      const { res, err } = await this.RunQuery(insertQuery);
-
-      if (err) {
-        this.logger.error('Db.UpdateSettings failed creating settings', err);
-        throw new AppError(400, 'Failed to create settings');
-      }
-
-      if (!res || res.length === 0) {
-        throw new AppError(400, 'Failed to create settings');
-      }
-
-      return res[0] as {
-        id: string;
-        platformFee: string;
-        createdAt: string;
-        updatedAt: string;
-      };
-    }
+  async UpdateSettings(platformFee: string): Promise<any> {
+    const s = await SettingsModel.create({ platformFee });
+    return s.toJSON();
   }
 }
-

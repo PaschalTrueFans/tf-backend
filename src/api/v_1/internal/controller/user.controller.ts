@@ -79,11 +79,11 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const currentUserId = req.userId; // From JWT auth middleware
-      
+
       // Parse pagination parameters with defaults
       const page = parseInt(req.query.page || '1', 10);
       const limit = parseInt(req.query.limit || '10', 10);
-      
+
       // Validate pagination parameters
       if (page < 1) {
         res.status(400).json({ error: 'Page must be greater than 0' });
@@ -93,7 +93,7 @@ export class UserController {
         res.status(400).json({ error: 'Limit must be between 1 and 100' });
         return;
       }
-      
+
       const response = await service.GetAllCreators(currentUserId, page, limit);
 
       body = {
@@ -131,7 +131,7 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const pageName = req.params.pageName;
-      const currentUserId = req.userId; // From JWT auth middleware
+      const currentUserId = req.userId || ''; // Default to empty string for public access
       const response = await service.GetCreatorByPageName(pageName, currentUserId);
 
       body = {
@@ -151,7 +151,7 @@ export class UserController {
       const service = new UserService({ db });
       const creatorId = req.params.id;
       const followerId = req.userId; // From JWT auth middleware
-      
+
       const result = await service.ToggleFollowCreator(creatorId, followerId);
 
       body = {
@@ -219,11 +219,11 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const userId = req.userId;
-      
+
       // Parse pagination parameters with defaults
       const page = parseInt(req.query.page || '1', 10);
       const limit = parseInt(req.query.limit || '10', 10);
-      
+
       // Validate pagination parameters
       if (page < 1) {
         res.status(400).json({ error: 'Page must be greater than 0' });
@@ -233,8 +233,37 @@ export class UserController {
         res.status(400).json({ error: 'Limit must be between 1 and 100' });
         return;
       }
-      
+
       const result = await service.GetAllPosts(userId, page, limit);
+      body = { data: result };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getFollowingFeed = async (req: RequestQuery<{ page?: string; limit?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+
+      // Parse pagination parameters with defaults
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '10', 10);
+
+      // Validate pagination parameters
+      if (page < 1) {
+        res.status(400).json({ error: 'Page must be greater than 0' });
+        return;
+      }
+      if (limit < 1 || limit > 100) {
+        res.status(400).json({ error: 'Limit must be between 1 and 100' });
+        return;
+      }
+
+      const result = await service.GetFollowingFeed(userId, page, limit);
       body = { data: result };
     } catch (error) {
       genericError(error, res);
@@ -248,11 +277,11 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const userId = req.userId;
-      
+
       // Parse pagination parameters with defaults
       const page = parseInt(req.query.page || '1', 10);
       const limit = parseInt(req.query.limit || '10', 10);
-      
+
       // Validate pagination parameters
       if (page < 1) {
         res.status(400).json({ error: 'Page must be greater than 0' });
@@ -262,7 +291,7 @@ export class UserController {
         res.status(400).json({ error: 'Limit must be between 1 and 100' });
         return;
       }
-      
+
       const result = await service.GetAllMyPosts(userId, page, limit);
       body = { data: result };
     } catch (error) {
@@ -331,7 +360,7 @@ export class UserController {
     res.json(body);
   };
 
-  
+
 
   public getMembershipById = async (req: Request, res: Response): Promise<void> => {
     let body;
@@ -586,9 +615,9 @@ export class UserController {
       const userId = req.userId;
       const commentId = await service.AddComment(postId, userId, req.body.comment);
 
-      body = { 
+      body = {
         message: 'Comment added successfully',
-        data: { id: commentId } 
+        data: { id: commentId }
       };
     } catch (error) {
       genericError(error, res);
@@ -620,7 +649,7 @@ export class UserController {
       const postId = req.params.id;
       const userId = req.userId;
       const result = await service.LikePost(postId, userId);
-      body = { 
+      body = {
         message: 'Post liked successfully',
         data: result
       };
@@ -638,7 +667,7 @@ export class UserController {
       const postId = req.params.id;
       const userId = req.userId;
       const result = await service.UnlikePost(postId, userId);
-      body = { 
+      body = {
         message: 'Post unliked successfully',
         data: result
       };
@@ -655,16 +684,16 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const userId = req.userId;
-      
+
       // Parse limit parameter with default
       const limit = parseInt(req.query.limit || '5', 10);
-      
+
       // Validate limit parameter
       if (limit < 1 || limit > 10) {
         res.status(400).json({ error: 'Limit must be between 1 and 10' });
         return;
       }
-      
+
       const response = await service.GetSuggestedCreators(userId, limit);
 
       body = {
@@ -817,12 +846,12 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const userId = req.userId;
-      
+
       // Parse pagination parameters with defaults
       const page = parseInt(req.query.page || '1', 10);
       const limit = parseInt(req.query.limit || '20', 10);
       const type = req.query.type as 'member' | 'creator' | undefined;
-      
+
       // Validate pagination parameters
       if (page < 1) {
         res.status(400).json({ error: 'Page must be greater than 0' });
@@ -832,13 +861,13 @@ export class UserController {
         res.status(400).json({ error: 'Limit must be between 1 and 100' });
         return;
       }
-      
+
       // Validate type parameter
       if (type && !['member', 'creator'].includes(type)) {
         res.status(400).json({ error: 'Type must be either "member" or "creator"' });
         return;
       }
-      
+
       const result = await service.GetAllNotifications(userId, page, limit, type);
       body = { data: result };
     } catch (error) {
@@ -1025,7 +1054,7 @@ export class UserController {
     let body;
     try {
       const token = req.body.token;
-      
+
       if (!token) {
         throw new BadRequest('Verification token is required');
       }
@@ -1054,13 +1083,13 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const userId = req.userId;
-      
+
       const { membershipId, successUrl, cancelUrl } = req.body;
       const session = await service.CreateCheckoutSession(userId, membershipId, successUrl, cancelUrl);
-      
-      body = { 
+
+      body = {
         data: session,
-        message: 'Checkout session created successfully' 
+        message: 'Checkout session created successfully'
       };
     } catch (error) {
       genericError(error, res);
@@ -1076,13 +1105,13 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const userId = req.userId;
-      
+
       const { productId, successUrl, cancelUrl } = req.body;
       const session = await service.CreateProductCheckoutSession(userId, productId, successUrl, cancelUrl);
-      
-      body = { 
+
+      body = {
         data: session,
-        message: 'Product checkout session created successfully' 
+        message: 'Product checkout session created successfully'
       };
     } catch (error) {
       genericError(error, res);
@@ -1098,7 +1127,7 @@ export class UserController {
       const service = new UserService({ db });
       const userId = req.userId;
       const productId = req.params.productId;
-      
+
       const hasPurchased = await service.HasUserPurchasedProduct(userId, productId);
       body = { data: { hasPurchased } };
     } catch (error) {

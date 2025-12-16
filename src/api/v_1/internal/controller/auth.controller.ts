@@ -27,6 +27,7 @@ export class AuthController {
       };
     } catch (error) {
       genericError(error, res);
+      return;
     }
     res.json(body);
   };
@@ -40,14 +41,16 @@ export class AuthController {
 
       const service = new AuthService({ db });
       const response = await service.Login(req.body.email, req.body.password);
-
+      console.log(response)
       body = {
         data: response,
       };
     } catch (error) {
       genericError(error, res);
+      return; // Don't send a second response
     }
     res.json(body);
+
   };
 
   // Send email handler
@@ -107,6 +110,7 @@ export class AuthController {
       };
     } catch (error) {
       genericError(error, res);
+      return;
     }
     res.json(body);
   };
@@ -126,6 +130,7 @@ export class AuthController {
       };
     } catch (error) {
       genericError(error, res);
+      return;
     }
     res.json(body);
   };

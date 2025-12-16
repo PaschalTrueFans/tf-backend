@@ -2,8 +2,7 @@
 import dotenv from 'dotenv';
 const result = dotenv.config();
 
-import Path from 'path';
-import knex, { Knex } from 'knex';
+import mongoose from 'mongoose';
 import { ENV } from '../helpers/env';
 import { Logger } from '../helpers/logger';
 
@@ -16,37 +15,18 @@ async function cleanUpDatabase() {
     Logger.info('Getting ready to cleanup...');
     Logger.info('Connecting database');
 
-    let db: Knex | undefined;
-
     try {
-      db = knex({
-        client: 'pg',
-        connection: {
-          host: ENV.Database.MIGRATOR_DB_HOST,
-          user: ENV.Database.DB_USER,
-          database: ENV.Database.DB_NAME,
-          password: ENV.Database.DB_PASSWORD,
-          ssl: ENV.Server.IS_LOCAL_ENV ? undefined : { rejectUnauthorized: false },
-        },
-      });
+      if (!ENV.Database.MONGO_URI) throw new Error('MONGO_URI is undefined');
+      await mongoose.connect(ENV.Database.MONGO_URI);
 
-      const query = db.raw(
-        `
-        DROP SCHEMA public CASCADE;
-        CREATE SCHEMA public;
-        `,
-      );
-      Logger.debug(query.toSQL().toNative());
-      await query;
-      Logger.info('Database cleaned asim');
+      Logger.info('Dropping database...');
+      await mongoose.connection.dropDatabase();
+      Logger.info('Database cleaned');
     } catch (e) {
       console.error('Error', e);
       throw e;
     } finally {
-      if (db) {
-        await db.destroy();
-        db = undefined;
-      }
+      await mongoose.disconnect();
     }
   } else {
     Logger.info('Not in local environment');

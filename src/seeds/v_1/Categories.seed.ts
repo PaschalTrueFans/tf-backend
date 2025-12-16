@@ -31,7 +31,7 @@ export async function categoriesSeed(db: Db) {
   try {
     // Check if categories table is empty
     const existingCategories = await db.v1.User.GetCategories();
-    
+
     if (existingCategories.length > 0) {
       Logger.info('Categories already exist, skipping seed');
       return;
@@ -45,8 +45,8 @@ export async function categoriesSeed(db: Db) {
       parentId: null,
     }));
 
-    await  db.v1.User.AddCategories(categoriesToInsert as Entities.Category[]);
-    
+    await db.v1.User.AddCategories(categoriesToInsert as Entities.Category[]);
+
     Logger.info('Categories seed completed successfully');
   } catch (error) {
     Logger.error('Error running categories seed', error);

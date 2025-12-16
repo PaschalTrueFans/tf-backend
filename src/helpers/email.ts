@@ -22,6 +22,9 @@ export class EmailService {
         user: SMTP.USER,
         pass: SMTP.PASSWORD,
       },
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,   // 10 seconds
+      socketTimeout: 10000,     // 10 seconds
     });
 
     // Verify connection configuration
