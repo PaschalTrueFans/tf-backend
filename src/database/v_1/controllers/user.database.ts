@@ -219,7 +219,7 @@ export class UserDatabase {
       isSubscriber = !!(await SubscriptionModel.exists({ creatorId, subscriberId: currentUserId }));
     }
 
-    return { ...creator, followersCount, subscribersCount, isFollowing, isSubscriber };
+    return { ...creator, id: creator._id.toString(), followersCount, subscribersCount, isFollowing, isSubscriber };
   }
 
   async GetCreatorByPageNameWithFollowStatus(pageName: string, currentUserId?: string): Promise<any> {
