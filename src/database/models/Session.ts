@@ -3,7 +3,7 @@ import mongoose, { Schema } from 'mongoose';
 const VerifySessionSchema = new Schema(
     {
         userId: { type: String, required: true },
-        token: { type: String, required: true },
+        token: { type: String },
         email: { type: String },
         otp: { type: String },
     },

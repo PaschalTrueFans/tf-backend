@@ -596,7 +596,9 @@ export class UserService {
     if (userId) {
       const existingLike = await this.db.v1.User.GetPostLike(postId, userId);
       isLiked = !!existingLike;
+      console.log('bad boy who??', existingLike)
     }
+    console.log(row)
 
     return {
       id: row.id,
@@ -623,14 +625,18 @@ export class UserService {
       })),
       comments: (row.comments || []).map((c: any) => ({
         id: c.id,
-        comment: c.comment,
+        content: c.content,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         userId: c.userId,
         userName: c.userName,
         userImage: c.userImage,
       })),
+
+
     };
+
+
   }
 
   async GetAllMyPosts(userId: string, page: number = 1, limit: number = 10): Promise<{
@@ -1232,7 +1238,7 @@ export class UserService {
   }
 
   // Comment CRUD methods
-  public async AddComment(postId: string, userId: string, comment: string): Promise<string> {
+  public async AddComment(postId: string, userId: string, comment: string, parentCommentId?: string): Promise<string> {
     Logger.info('UserService.AddComment', { postId, userId, comment: comment.substring(0, 50) + '...' });
 
     // Verify that the post exists
@@ -1247,7 +1253,7 @@ export class UserService {
       throw new BadRequest('User not found');
     }
 
-    const commentId = await this.db.v1.User.AddComment(postId, userId, comment);
+    const commentId = await this.db.v1.User.AddComment(postId, userId, comment, parentCommentId);
     return commentId;
   }
 

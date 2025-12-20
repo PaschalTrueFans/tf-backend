@@ -613,11 +613,11 @@ export class UserController {
       const service = new UserService({ db });
       const postId = req.params.id;
       const userId = req.userId;
-      const commentId = await service.AddComment(postId, userId, req.body.comment);
+      const commentId = await service.AddComment(postId, userId, req.body.comment, req.body.parentCommentId);
 
       body = {
         message: 'Comment added successfully',
-        data: { id: commentId }
+        data: { _id: commentId }
       };
     } catch (error) {
       genericError(error, res);

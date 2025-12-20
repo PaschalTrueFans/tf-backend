@@ -300,17 +300,32 @@ export class UserDatabase {
     // Populate creator
     const creator = await UserModel.findById(post.creatorId).lean();
 
-    // Comments would need a Comment model, let's assume we create one or it's subdocument.
-    // For now assuming empty comments implementation or adding CommentModel later
-    const comments: any[] = [];
+    // Fetch comments
+    const comments = await CommentModel.find({ postId }).sort({ createdAt: -1 }).lean();
+
+    // Enrich comments with user details
+    const enrichedComments = await Promise.all(comments.map(async (c: any) => {
+      const user = await UserModel.findById(c.userId).select('name profilePhoto').lean();
+      return {
+        ...c,
+        id: c._id.toString(), // Ensure id is available
+        userName: user?.name || 'Unknown User',
+        userImage: user?.profilePhoto || '',
+      };
+    }));
+
+    // Get real-time like count
+    const totalLikes = await LikeModel.countDocuments({ postId });
 
     return {
       ...post,
+      id: post._id.toString(),
+      totalLikes,
       mediaFiles: post.mediaFiles || [],
       creatorName: creator?.name,
       creatorImage: creator?.profilePhoto,
       categoryName: '', // Need to lookup category via creator
-      comments
+      comments: enrichedComments
     };
   }
 
@@ -332,19 +347,21 @@ export class UserDatabase {
     // 3. Enrich posts with creator info
     const enrichedPosts = await Promise.all((posts as any[]).map(async (p) => {
       const creator = await UserModel.findById(p.creatorId).select('profilePhoto pageName').lean();
+      const totalLikes = await LikeModel.countDocuments({ postId: p._id.toString() });
+
       return {
         postId: p._id.toString(),
         postTitle: p.title,
         content: p.content,
         createdAt: p.createdAt,
         tags: p.tags,
-        totalLikes: p.totalLikes,
+        totalLikes,
         creatorId: p.creatorId,
         creatorImage: creator?.profilePhoto,
         pageName: creator?.pageName,
-        totalComments: 0, // Placeholder
+        totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }), // might as well fix comments count too if placeholder was 0
         attachedMedia: (p.mediaFiles as any)?.map((m: any) => m.url) || [],
-        isLiked: false // Placeholder
+        isLiked: await LikeModel.exists({ postId: p._id.toString(), userId }) // Update isLiked logic? The original used placeholder false
       };
     }));
 
@@ -357,15 +374,15 @@ export class UserDatabase {
       .limit(10) // defaulting limit since SQL didn't have one but likely implicit or UI handled
       .lean();
 
-    return (posts as any[]).map(p => ({
+    return Promise.all((posts as any[]).map(async p => ({
       id: p._id.toString(),
       title: p.title,
       createdAt: p.createdAt,
       accessType: p.accessType,
-      totalLikes: p.totalLikes,
-      totalComments: 0,
+      totalLikes: await LikeModel.countDocuments({ postId: p._id.toString() }),
+      totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }),
       mediaFiles: (p.mediaFiles as any)?.map((m: any) => m.url) || []
-    }));
+    })));
   }
 
   async GetPublicPostsByOtherCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
@@ -384,19 +401,21 @@ export class UserDatabase {
 
     const enrichedPosts = await Promise.all((posts as any[]).map(async (p) => {
       const creator = await UserModel.findById(p.creatorId).select('profilePhoto pageName').lean();
+      const totalLikes = await LikeModel.countDocuments({ postId: p._id.toString() });
+
       return {
         postId: p._id.toString(),
         postTitle: p.title,
         content: p.content,
         createdAt: p.createdAt,
         tags: p.tags,
-        totalLikes: p.totalLikes,
+        totalLikes,
         creatorId: p.creatorId,
         creatorImage: creator?.profilePhoto,
         pageName: creator?.pageName,
-        totalComments: 0,
+        totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }),
         attachedMedia: (p.mediaFiles as any)?.map((m: any) => m.url) || [],
-        isLiked: false
+        isLiked: await LikeModel.exists({ postId: p._id.toString(), userId })
       };
     }));
 
@@ -658,7 +677,8 @@ export class UserDatabase {
   }
 
   async GetPostLike(postId: string, userId: string): Promise<any> {
-    return LikeModel.findOne({ postId, userId });
+    const like = await LikeModel.findOne({ postId, userId });
+    return like;
   }
 
   async LikePost(postId: string, userId: string): Promise<number> {
@@ -780,7 +800,15 @@ export class UserDatabase {
       .skip((page - 1) * limit)
       .limit(limit);
 
-    return posts as unknown as Entities.Post[];
+    // Enrich with real-time like count
+    return Promise.all(posts.map(async (p) => {
+      const totalLikes = await LikeModel.countDocuments({ postId: p.id });
+      return {
+        ...p.toJSON(),
+        id: p.id,
+        totalLikes
+      } as Entities.Post;
+    }));
   }
 
   async GetAllMyPosts(userId: string, page: number = 1, limit: number = 10): Promise<Entities.Post[]> {
@@ -788,7 +816,16 @@ export class UserDatabase {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
-    return posts as unknown as Entities.Post[];
+
+    // Enrich with real-time like count
+    return Promise.all(posts.map(async (p) => {
+      const totalLikes = await LikeModel.countDocuments({ postId: p.id });
+      return {
+        ...p.toJSON(),
+        id: p.id,
+        totalLikes
+      } as Entities.Post;
+    }));
   }
 
   async DeleteMembership(membershipId: string): Promise<void> {
@@ -823,8 +860,8 @@ export class UserDatabase {
     };
   }
 
-  async AddComment(postId: string, userId: string, content: string): Promise<string> {
-    const comment = await CommentModel.create({ postId, userId, content });
+  async AddComment(postId: string, userId: string, content: string, parentCommentId?: string): Promise<string> {
+    const comment = await CommentModel.create({ postId, userId, content, parentCommentId });
     return comment.id;
   }
 }
