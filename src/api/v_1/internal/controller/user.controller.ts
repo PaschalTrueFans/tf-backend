@@ -457,7 +457,7 @@ export class UserController {
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const productId = req.params.id;
-      const product = await service.GetProductById(productId);
+      const product = await service.GetProductById(productId, req.userId);
       body = { data: product };
     } catch (error) {
       genericError(error, res);

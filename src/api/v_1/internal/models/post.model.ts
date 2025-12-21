@@ -13,6 +13,7 @@ export const CreatePostBodySchema = z.object({
   title: z.string().min(1),
   content: z.string().min(1),
   accessType: z.string().default('free'),
+  allowedMembershipIds: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   mediaFiles: z.array(MediaFileSchema).optional(),
 });
@@ -23,6 +24,7 @@ export const UpdatePostBodySchema = z.object({
   title: z.string().optional(),
   content: z.string().optional(),
   accessType: z.string().optional(),
+  allowedMembershipIds: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   mediaFiles: z.array(MediaFileSchema).optional(),
 });

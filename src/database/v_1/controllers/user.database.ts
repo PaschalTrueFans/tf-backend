@@ -789,12 +789,18 @@ export class UserDatabase {
     return p ? (p.toJSON() as Entities.ProductPurchase) : null;
   }
   async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<Entities.Post[]> {
-    const subs = await SubscriptionModel.find({ subscriberId: userId, status: 'active' }).select('creatorId');
+    const subs = await SubscriptionModel.find({ subscriberId: userId, status: 'active' }).select('creatorId membershipId');
     const creatorIds = subs.map(s => s.creatorId);
+    const membershipIds = subs.map(s => s.membershipId);
 
     const posts = await PostModel.find({
       creatorId: { $in: creatorIds },
-      accessType: 'premium'
+      accessType: 'premium',
+      $or: [
+        { allowedMembershipIds: { $in: membershipIds } },
+        { allowedMembershipIds: { $size: 0 } },
+        { allowedMembershipIds: { $exists: false } }
+      ]
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)

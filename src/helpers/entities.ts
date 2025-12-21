@@ -102,6 +102,7 @@ export interface Post extends DefaultTable {
   tags?: string[] | null;
   totalLikes: number;
   mediaFiles?: PostMediaFile[] | null;
+  allowedMembershipIds?: string[];
 }
 
 export interface PostMediaFile extends DefaultTable {
@@ -134,7 +135,9 @@ export interface Product extends DefaultTable {
   creatorId: string;
   name: string;
   description?: string;
-  mediaUrl?: string;
+  mediaUrl?: string; // For digital products
+  accessType?: 'free' | 'premium';
+  allowedMembershipIds?: string[];
   price: string;
   stripeProductId?: string;
   stripePriceId?: string;

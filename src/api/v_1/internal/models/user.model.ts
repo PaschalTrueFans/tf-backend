@@ -129,6 +129,8 @@ export const CreateProductBodySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   mediaUrl: z.string().optional(),
+  accessType: z.enum(['free', 'premium']).optional().default('free'),
+  allowedMembershipIds: z.array(z.string()).optional(),
   price: z.string().min(1, 'Price is required'),
 });
 
@@ -138,6 +140,8 @@ export const UpdateProductBodySchema = z.object({
   name: z.string().min(1, 'Name is required').optional(),
   description: z.string().optional(),
   mediaUrl: z.string().optional(),
+  accessType: z.enum(['free', 'premium']).optional(),
+  allowedMembershipIds: z.array(z.string()).optional(),
   price: z.string().min(1, 'Price is required').optional(),
 });
 
@@ -149,6 +153,8 @@ export interface ProductResponse extends DefaultTable {
   name: string;
   description?: string;
   mediaUrl?: string;
+  accessType?: 'free' | 'premium';
+  allowedMembershipIds?: string[];
   price: string;
 }
 

@@ -369,6 +369,7 @@ export class UserService {
       title: body.title,
       content: body.content,
       accessType: body.accessType ?? 'free',
+      allowedMembershipIds: body.allowedMembershipIds,
       tags: body.tags,
     };
     const mediaFiles = body.mediaFiles?.map((m) => ({
@@ -600,6 +601,32 @@ export class UserService {
     }
     console.log(row)
 
+    // Check access permissions
+    const canAccess = await this.hasAccessToPost(userId, row, row.creatorId);
+
+    // If no access, return limited data
+    if (!canAccess) {
+      return {
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        creatorId: row.creatorId,
+        title: row.title,
+        content: this.stripHtmlAndTruncate(row.content, 200), // Show preview
+        accessType: row.accessType,
+        allowedMembershipIds: row.allowedMembershipIds,
+        tags: row.tags,
+        totalLikes: parseInt(row.totalLikes) || 0,
+        isLiked: isLiked,
+        creatorName: row.creatorName,
+        creatorImage: row.creatorImage,
+        categoryName: row.categoryName,
+        mediaFiles: [], // Hide media
+        isLocked: true,
+        comments: [], // Hide comments
+      };
+    }
+
     return {
       id: row.id,
       createdAt: row.createdAt,
@@ -608,6 +635,7 @@ export class UserService {
       title: row.title,
       content: row.content,
       accessType: row.accessType,
+      allowedMembershipIds: row.allowedMembershipIds,
       tags: row.tags,
       totalLikes: parseInt(row.totalLikes) || 0,
       isLiked: isLiked,
@@ -632,11 +660,35 @@ export class UserService {
         userName: c.userName,
         userImage: c.userImage,
       })),
-
-
+      isLocked: false,
     };
+  }
 
+  // Helper to check if user has access to post
+  private async hasAccessToPost(userId: string, post: any, creatorId: string): Promise<boolean> {
+    // 1. If post is free, everyone has access
+    if (post.accessType === 'free') return true;
 
+    // 2. If user is the creator, they have access
+    if (userId === creatorId) return true;
+
+    // 3. If no specific memberships required, but it is premium... (assuming basic verification checks 'premium' status if implemented, but here we focus on tiers)
+    // If allowedMembershipIds is empty or undefined, and accessType is premium, maybe it means ANY paid sub?
+    // For now, let's assume if it has specific IDs, we check those.
+    if (!post.allowedMembershipIds || post.allowedMembershipIds.length === 0) {
+      // If allowedMembershipIds is empty, but accessType is not 'free',
+      // it implies any active subscription to the creator grants access.
+      const subscription = await this.db.v1.User.GetSubscriptionByUserAndCreator(userId, creatorId);
+      return !!(subscription && subscription.isActive);
+    }
+
+    // 4. Check specific membership tiers
+    const subscription = await this.db.v1.User.GetSubscriptionByUserAndCreator(userId, creatorId);
+
+    if (!subscription || !subscription.isActive) return false;
+
+    // Check if their membership ID maps to one of the allowed ones
+    return post.allowedMembershipIds.includes(subscription.membershipId);
   }
 
   async GetAllMyPosts(userId: string, page: number = 1, limit: number = 10): Promise<{
@@ -827,10 +879,57 @@ export class UserService {
 
     const updateData: Partial<Entities.Membership> = {
       name: body.name,
-      price: body.price,
-      currency: body.currency,
       description: body.description,
     };
+
+    // If price or currency is being updated, we need to create a new Stripe Price
+    const newPrice = body.price || membership.price;
+    const newCurrency = (body.currency || membership.currency || 'ngn').toLowerCase();
+
+    // Check if either changed
+    const priceChanged = body.price && body.price !== membership.price;
+    const currencyChanged = body.currency && body.currency.toLowerCase() !== (membership.currency || '').toLowerCase();
+
+    if (priceChanged || currencyChanged) {
+      try {
+        // Get platform fee from settings
+        const platformFee = await this.getPlatformFee();
+        Logger.info('UserService.UpdateMembership - Platform fee', { platformFee });
+
+        const originalPrice = parseFloat(newPrice);
+        const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
+
+        // Check if we have a stripeProductId
+        if (!membership.stripeProductId) {
+          throw new BadRequest('Membership is missing Stripe Product ID configuration. Cannot update price/currency.');
+        }
+
+        // Create new Stripe Price
+        const stripePrice = await stripeService.createPrice(
+          membership.stripeProductId,
+          priceWithFee,
+          newCurrency
+        );
+
+        Logger.info('UserService.UpdateMembership - New Stripe price created', {
+          stripePriceId: stripePrice.id,
+          stripePriceAmount: stripePrice.unit_amount,
+          calculatedPriceWithFee: priceWithFee,
+          currency: newCurrency
+        });
+
+        // Update DB fields
+        updateData.price = newPrice;
+        updateData.currency = newCurrency.toUpperCase();
+        updateData.stripePriceId = stripePrice.id;
+        updateData.platformFee = platformFee;
+        updateData.priceWithFee = priceWithFee;
+
+      } catch (error) {
+        Logger.error('UserService.UpdateMembership - Failed to update Stripe price', error);
+        throw new AppError(500, 'Failed to update membership price with Stripe integration');
+      }
+    }
 
     return await this.db.v1.User.UpdateMembership(membershipId, updateData);
   }
@@ -917,6 +1016,8 @@ export class UserService {
         description: body.description,
         mediaUrl: body.mediaUrl,
         price: body.price, // Store original price for display
+        accessType: body.accessType,
+        allowedMembershipIds: body.allowedMembershipIds,
         stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
         platformFee: platformFee, // Store platform fee percentage
@@ -953,9 +1054,57 @@ export class UserService {
     return await this.db.v1.User.GetProductsByCreator(creatorId);
   }
 
-  public async GetProductById(productId: string): Promise<Entities.Product | null> {
-    Logger.info('UserService.GetProductById', { productId });
-    return await this.db.v1.User.GetProductById(productId);
+  public async GetProductById(productId: string, currentUserId?: string): Promise<Entities.Product | null> {
+    Logger.info('UserService.GetProductById', { productId, currentUserId });
+
+    const product = await this.db.v1.User.GetProductById(productId);
+    if (!product) return null;
+
+    // 1. If user is the creator, allow access
+    if (currentUserId && product.creatorId === currentUserId) {
+      return product;
+    }
+
+    // 2. If product is free, allow access
+    if (!product.accessType || product.accessType === 'free') {
+      return product;
+    }
+
+    // 3. If product is paid/premium:
+    // Check if user purchased it
+    if (currentUserId) {
+      const purchase = await this.db.v1.User.GetProductPurchaseByUserAndProduct(currentUserId, productId);
+      if (purchase && purchase.status === 'completed') {
+        return product;
+      }
+    }
+
+    // Check if user has allowed membership
+    if (product.allowedMembershipIds && product.allowedMembershipIds.length > 0 && currentUserId) {
+      const subscription = await this.db.v1.User.GetSubscriptionByUserAndCreator(currentUserId, product.creatorId);
+      if (subscription && subscription.isActive && product.allowedMembershipIds.includes(subscription.membershipId)) {
+        return product;
+      }
+    } else if (product.accessType === 'premium' && (!product.allowedMembershipIds || product.allowedMembershipIds.length === 0)) {
+      // Premium but no specific tiers listed? Maybe implied "any generic sub"?
+      // SAFE DEFAULT: If marked premium but no allowed IDs, rely on Purchase ONLY (already checked above),
+      // OR check generic subscription?
+      // Let's assume strict: if tiers needed, they must be listed. If empty list but premium, it's purchase-only.
+      // Or, if we want "Any Subscriber", we should check for ANY active sub.
+      // User requirement: "give access heirachy to the subscription tiers"
+      // Let's stick to: Access if purchased OR (ActiveSub AND Tier MATCHES).
+    }
+
+    // If we reach here, ACCESS DENIED.
+    // Return masked product or throw error?
+    // Usually we return limited info.
+    return {
+      ...product,
+      mediaUrl: undefined, // Hide the file
+      description: 'This is a premium product. Please purchase or subscribe to view.',
+      // We might add a flag `isLocked: true` but Entity doesn't have it.
+      // For now, hiding mediaUrl is the key protection.
+    };
   }
 
   public async UpdateProduct(productId: string, creatorId: string, body: any): Promise<Entities.Product | null> {
@@ -982,6 +1131,8 @@ export class UserService {
       description: body.description,
       mediaUrl: body.mediaUrl,
       price: body.price,
+      accessType: body.accessType,
+      allowedMembershipIds: body.allowedMembershipIds,
     };
 
     // Remove undefined fields

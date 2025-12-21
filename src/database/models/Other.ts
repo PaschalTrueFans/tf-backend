@@ -104,6 +104,8 @@ const ProductSchema = new Schema(
         name: { type: String, required: true },
         description: { type: String },
         mediaUrl: { type: String },
+        accessType: { type: String, default: 'free', enum: ['free', 'premium'] },
+        allowedMembershipIds: [{ type: String }],
         price: { type: String, required: true },
         stripeProductId: { type: String },
         stripePriceId: { type: String },
