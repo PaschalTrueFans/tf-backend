@@ -84,6 +84,7 @@ export const CreateMembershipBodySchema = z.object({
   price: z.string().min(1, 'Price is required'),
   currency: z.string().min(1, 'Currency is required').default('NGN'),
   description: z.string().optional(),
+  imageUrl: z.string().optional(),
 });
 
 export type CreateMembershipBody = z.infer<typeof CreateMembershipBodySchema>;
@@ -93,6 +94,7 @@ export const UpdateMembershipBodySchema = z.object({
   price: z.string().min(1, 'Price is required').optional(),
   currency: z.string().min(1, 'Currency is required').optional(),
   description: z.string().optional(),
+  imageUrl: z.string().optional(),
 });
 
 export type UpdateMembershipBody = z.infer<typeof UpdateMembershipBodySchema>;
@@ -122,6 +124,7 @@ export interface MembershipResponse extends DefaultTable {
   price: string;
   currency: string;
   description?: string;
+  imageUrl?: string;
 }
 
 // Product schemas

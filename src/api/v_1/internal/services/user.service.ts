@@ -819,6 +819,7 @@ export class UserService {
         price: body.price, // Store original price for display
         currency: body.currency || 'NGN',
         description: body.description,
+        imageUrl: body.imageUrl,
         stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
         platformFee: platformFee, // Store platform fee percentage
@@ -880,6 +881,7 @@ export class UserService {
     const updateData: Partial<Entities.Membership> = {
       name: body.name,
       description: body.description,
+      imageUrl: body.imageUrl,
     };
 
     // If price or currency is being updated, we need to create a new Stripe Price

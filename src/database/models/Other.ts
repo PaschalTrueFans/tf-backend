@@ -50,6 +50,7 @@ const MembershipSchema = new Schema(
         price: { type: String, required: true }, // Changed to String to match Entity
         currency: { type: String, required: true },
         description: { type: String },
+        imageUrl: { type: String },
         stripeProductId: { type: String },
         stripePriceId: { type: String },
         platformFee: { type: Number },

@@ -82,6 +82,7 @@ export interface VerifiedUser {
 
 export enum s3Paths {
   profilePictures = 'profile-pictures/',
+  membershipImages = 'membership-images/',
 }
 
 export interface Follower extends DefaultTable {
@@ -125,6 +126,7 @@ export interface Membership extends DefaultTable {
   price: string;
   currency: string;
   description?: string;
+  imageUrl?: string;
   stripeProductId?: string;
   stripePriceId?: string;
   platformFee?: number;
