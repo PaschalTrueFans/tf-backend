@@ -3,7 +3,9 @@ import { UserDatabase } from './v_1/controllers/user.database';
 import { AdminDatabase } from './v_1/controllers/admin.database';
 import { AuthDatabase } from './v_1/controllers/auth.database';
 import { ChatDatabase } from './v_1/controllers/chat.database';
+import { CommunityDatabase } from './v_1/controllers/community.database';
 import { LinkInBioDatabase } from './v_1/controllers/link-in-bio.database';
+import { WalletDatabase } from './v_1/controllers/wallet.database';
 import { MongoDb } from './mongo';
 
 export class Db {
@@ -15,7 +17,9 @@ export class Db {
     Admin: AdminDatabase;
     Auth: AuthDatabase;
     Chat: ChatDatabase;
+    Community: CommunityDatabase;
     LinkInBio: LinkInBioDatabase;
+    Wallet: WalletDatabase;
   };
 
   public constructor() {
@@ -40,7 +44,9 @@ export class Db {
       Admin: new AdminDatabase(dbArgs),
       Auth: new AuthDatabase(dbArgs),
       Chat: new ChatDatabase(dbArgs),
+      Community: new CommunityDatabase(dbArgs),
       LinkInBio: new LinkInBioDatabase(dbArgs),
+      Wallet: new WalletDatabase(dbArgs),
     };
   }
 

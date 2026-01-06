@@ -280,3 +280,28 @@ export interface LinkInBioProfile extends DefaultTable {
   links?: any[];
   socialLinks?: any;
 }
+
+export interface Wallet extends DefaultTable {
+  userId: string;
+  coinBalance: number;
+  usdBalance: number;
+  bankDetails?: {
+    accountName: string;
+    accountNumber: string;
+    bankName: string;
+    bankCode: string;
+  };
+}
+
+export type TransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'PURCHASE_COINS' | 'GIFT_SEND' | 'GIFT_RECEIVE';
+export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
+
+export interface WalletTransaction extends DefaultTable {
+  walletId: string;
+  type: TransactionType;
+  amount: number;
+  currency: 'USD' | 'COIN';
+  relatedUserId?: string;
+  status: TransactionStatus;
+  metadata?: any;
+}

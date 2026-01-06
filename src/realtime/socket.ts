@@ -11,12 +11,16 @@ interface ServerToClientEvents {
   messageSent: (payload: { messageId: string; status: string }) => void;
   conversationUpdated: (payload: { conversationId: string; lastMessageContent: string; lastMessageAt: string }) => void;
   error: (payload: { message: string }) => void;
+  communityMessage: (payload: { channelId: string; message: any }) => void;
 }
 
 interface ClientToServerEvents {
   joinRoom: (payload: { conversationId: string }) => void;
   message: (payload: { conversationId: string; content: string }) => void;
   newConversation: (payload: { creatorId: string; firstMessage: string }) => void;
+  joinChannel: (payload: { channelId: string }) => void;
+  leaveChannel: (payload: { channelId: string }) => void;
+  communityMessage: (payload: { channelId: string; content: string; communityId: string }) => void;
 }
 
 type InterServerEvents = Record<string, never>;
@@ -51,14 +55,14 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
   });
 
   io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
-    Logger.info('Socket connected', { 
-      userId: socket.data.userId, 
+    Logger.info('Socket connected', {
+      userId: socket.data.userId,
       socketId: socket.id,
       transport: socket.conn.transport.name,
       userAgent: socket.handshake.headers['user-agent']
     });
     const db = new Db();
-    
+
     // Join user's personal room for global updates
     socket.join(`user:${socket.data.userId}`);
 
@@ -86,17 +90,17 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
           return;
         }
         const message = await db.v1.Chat.CreateMessage(conversationId, socket.data.userId, content.trim());
-        
+
         // Emit the message to the conversation room
         io.to(conversationId).emit('message', { conversationId, message });
-        
+
         // Emit conversation update to all participants
         io.to(conversationId).emit('conversationUpdated', {
           conversationId,
           lastMessageContent: message.content,
           lastMessageAt: message.createdAt
         });
-        
+
         // Also emit to personal rooms for users not in the conversation room
         const conversation = await db.v1.Chat.GetConversationById(conversationId);
         if (conversation) {
@@ -111,7 +115,7 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
             lastMessageAt: message.createdAt
           });
         }
-        
+
         // Emit confirmation to sender
         socket.emit('messageSent', { messageId: message.id, status: 'sent' });
       } catch (e) {
@@ -137,14 +141,14 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
         // Join room and notify both participants
         socket.join(conversation.id);
         io.to(conversation.id).emit('message', { conversationId: conversation.id, message });
-        
+
         // Emit conversation update to all participants
         io.to(conversation.id).emit('conversationUpdated', {
           conversationId: conversation.id,
           lastMessageContent: message.content,
           lastMessageAt: message.createdAt
         });
-        
+
         // Also emit to personal rooms
         io.to(`user:${creatorId}`).emit('conversationUpdated', {
           conversationId: conversation.id,
@@ -156,15 +160,70 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
           lastMessageContent: message.content,
           lastMessageAt: message.createdAt
         });
-        
+
         // Emit confirmation to sender
         socket.emit('messageSent', { messageId: message.id, status: 'sent' });
-        
+
         // Also notify the creator via a personal room if connected
         io.to(`user:${creatorId}`).emit('conversationCreated', { conversation });
         io.to(`user:${memberId}`).emit('conversationCreated', { conversation });
       } catch (e) {
         socket.emit('error', { message: 'Failed to create conversation' });
+      }
+    });
+
+    // --- Community Chat Events ---
+
+    socket.on('joinChannel', async ({ channelId }: { channelId: string }) => {
+      try {
+        // TODO: Validate user has access to this channel (public vs private, role check)
+        // For now assuming if they are a member of the community, they can join.
+        // We would need to fetch channel -> communityId -> check membership.
+        // Ideally we optimize this.
+
+        socket.join(`channel:${channelId}`);
+        // socket.emit('channelJoined', { channelId });
+      } catch (e) {
+        socket.emit('error', { message: 'Failed to join channel' });
+      }
+    });
+
+    socket.on('leaveChannel', ({ channelId }: { channelId: string }) => {
+      socket.leave(`channel:${channelId}`);
+    });
+
+    socket.on('communityMessage', async ({ channelId, content, communityId }: { channelId: string; content: string; communityId: string }) => {
+      try {
+        if (!content || !content.trim()) return;
+
+        // Verify membership
+        const member = await db.v1.Community.GetMember(communityId, socket.data.userId);
+        if (!member) {
+          socket.emit('error', { message: 'Not a member of this community' });
+          return;
+        }
+        if (member.isMuted && (!member.mutedUntil || new Date(member.mutedUntil) > new Date())) {
+          socket.emit('error', { message: 'You are muted' });
+          return;
+        }
+
+        const message = await db.v1.Community.CreateChannelMessage(channelId, socket.data.userId, content.trim());
+
+        // Emit to channel
+        io.to(`channel:${channelId}`).emit('communityMessage', { channelId, message });
+
+        // Tracking Activity / XP
+        // Debounce or cap logic could be applied here
+        await db.v1.Community.UpdateMemberXP(communityId, socket.data.userId, 10); // +10 XP per message
+
+        socket.emit('messageSent', { messageId: message.id, status: 'sent' });
+
+        // Notifications for mentions (simplified)
+        // if (content.includes('@')) ... logic
+
+      } catch (e) {
+        Logger.error('communityMessage error', e);
+        socket.emit('error', { message: 'Failed to send message' });
       }
     });
 

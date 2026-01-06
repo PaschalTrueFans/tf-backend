@@ -101,7 +101,7 @@ export type UpdateMembershipBody = z.infer<typeof UpdateMembershipBodySchema>;
 
 // Stripe checkout session schema
 export const CreateCheckoutSessionBodySchema = z.object({
-  membershipId: z.string().uuid('Invalid membership ID'),
+  membershipId: z.string().min(1, 'Invalid membership ID'),
   successUrl: z.string().url('Invalid success URL'),
   cancelUrl: z.string().url('Invalid cancel URL'),
 });
@@ -110,7 +110,7 @@ export type CreateCheckoutSessionBody = z.infer<typeof CreateCheckoutSessionBody
 
 // Product checkout session schema
 export const CreateProductCheckoutSessionBodySchema = z.object({
-  productId: z.string().uuid('Invalid product ID'),
+  productId: z.string().min(1, 'Invalid product ID'),
   successUrl: z.string().url('Invalid success URL'),
   cancelUrl: z.string().url('Invalid cancel URL'),
 });

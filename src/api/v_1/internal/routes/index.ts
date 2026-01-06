@@ -12,6 +12,8 @@ import { chatRoutes } from './chat.routes';
 import { adminRoutes } from './admin.routes';
 import { linkInBioRoutes } from './link-in-bio.routes';
 import webhookRoutes from './webhook.routes';
+import { walletRoutes } from './wallet.routes';
+import { communityRoutes } from './community.routes';
 
 export class ApiRouter {
   public router: express.Router;
@@ -39,6 +41,8 @@ export class ApiRouter {
     this.router.use('/user/chat', chatRoutes);
     this.router.use('/admin', adminRoutes);
     this.router.use('/link-in-bio', linkInBioRoutes);
+    this.router.use('/wallet', walletRoutes);
+    this.router.use('/community', communityRoutes);
 
     // Public link-in-bio route alias
     const linkInBioController = new LinkInBioController();

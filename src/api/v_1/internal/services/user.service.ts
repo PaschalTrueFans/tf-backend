@@ -1611,15 +1611,7 @@ export class UserService {
   }
 
   // Insights Methods
-  public async GetCreatorInsights(creatorId: string): Promise<{
-    totalSubscribers: number;
-    activeSubscribers: number;
-    totalRevenue: number;
-    postsThisMonth: number;
-    freePosts: number;
-    paidPosts: number;
-    recentTransactions: any[];
-  }> {
+  public async GetCreatorInsights(creatorId: string): Promise<any> {
     Logger.info('UserService.GetCreatorInsights', { creatorId });
 
     // Check if user is a creator

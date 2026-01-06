@@ -7,6 +7,8 @@ import { DatabaseErrors } from '../../../helpers/contants';
 import { UserModel } from '../../models/User';
 import { PostModel, CommentModel, LikeModel } from '../../models/Post';
 import { CategoryModel, FollowerModel, MembershipModel, SubscriptionModel, ProductModel, EventModel, ProductPurchaseModel, TransactionModel, GroupInviteModel, VerificationTokenModel, NotificationModel } from '../../models/Other';
+import { WalletModel } from '../../models/Wallet';
+import { WalletTransactionModel } from '../../models/WalletTransaction';
 
 export class UserDatabase {
   private logger: typeof Logger;
@@ -693,20 +695,50 @@ export class UserDatabase {
 
   // Suggested Creators
   async GetSuggestedCreators(userId: string, limit: number = 3): Promise<Entities.User[]> {
-    const follows = await FollowerModel.find({ followerId: userId }).select('userId');
+    // 1. Get current follows and subscriptions
+    const [follows, subscriptions] = await Promise.all([
+      FollowerModel.find({ followerId: userId }).select('userId'),
+      SubscriptionModel.find({ subscriberId: userId, isActive: true }).select('creatorId')
+    ]);
 
-    // Filter out any undefined or invalid IDs
-    const followedIds = follows
-      .map(f => f.userId)
-      .filter(id => id && id !== 'undefined');
+    // 2. Aggregate all IDs to exclude (followed, subscribed, and self)
+    const followedIds = follows.map(f => f.userId);
+    const subscribedIds = subscriptions.map(s => s.creatorId);
+    const excludeIds = Array.from(new Set([...followedIds, ...subscribedIds, userId])).filter(id => id && id !== 'undefined');
 
-    const validUserId = (userId && userId !== 'undefined') ? userId : null;
-    const excludeIds = validUserId ? [...followedIds, validUserId] : followedIds;
+    // 3. Find categories of interest based on current follows/subscriptions
+    const interestIds = [...followedIds, ...subscribedIds];
+    const interests = await UserModel.find({ _id: { $in: interestIds } }).select('categoryId').lean() as any[];
+    const categoryIds = Array.from(new Set(interests.map(i => i.categoryId).filter(Boolean)));
 
-    const creators = await UserModel.find({
+    // 4. Find potential suggestions
+    let query: any = {
       pageName: { $exists: true, $ne: null },
       _id: { $nin: excludeIds }
-    }).limit(limit);
+    };
+
+    // If we have interests, prioritize those categories
+    if (categoryIds.length > 0) {
+      query.categoryId = { $in: categoryIds };
+    }
+
+    const creators = await UserModel.find(query)
+      .sort({ createdAt: -1 }) // Fallback sort
+      .limit(limit)
+      .lean();
+
+    // 5. If we don't have enough category-based results, fill with general creators
+    if (creators.length < limit) {
+      const moreCreators = await UserModel.find({
+        pageName: { $exists: true, $ne: null },
+        _id: { $nin: [...excludeIds, ...creators.map((c: any) => c._id.toString())] }
+      })
+        .limit(limit - creators.length)
+        .lean();
+
+      creators.push(...moreCreators);
+    }
+
     return creators as unknown as Entities.User[];
   }
 
@@ -733,11 +765,128 @@ export class UserDatabase {
 
   // Creator Insights
   async GetCreatorInsights(creatorId: string): Promise<any> {
+    const now = new Date();
+    const past24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const past7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const past30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Split queries to avoid TS complexity error
+    const followerStats = await Promise.all([
+      FollowerModel.countDocuments({ userId: creatorId }),
+      FollowerModel.countDocuments({ userId: creatorId, createdAt: { $gte: past24h } }),
+      FollowerModel.countDocuments({ userId: creatorId, createdAt: { $gte: past7d } }),
+    ]);
+
+    const subStats = await Promise.all([
+      SubscriptionModel.countDocuments({ creatorId }),
+      SubscriptionModel.countDocuments({ creatorId, isActive: true }),
+      SubscriptionModel.countDocuments({ creatorId, createdAt: { $gte: past7d } }),
+      SubscriptionModel.aggregate([
+        { $match: { creatorId, isActive: true } },
+        {
+          $group: {
+            _id: '$membershipId',
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+    ]);
+
+    // Pre-fetch post IDs for likes/comments counts
+    const postIds = await PostModel.find({ creatorId }).distinct('_id');
+
+    const engagementStats = await Promise.all([
+      PostModel.countDocuments({ creatorId }),
+      LikeModel.countDocuments({ postId: { $in: postIds } }),
+      CommentModel.countDocuments({ postId: { $in: postIds } }),
+      PostModel.find({ creatorId })
+        .sort({ totalLikes: -1 })
+        .limit(3)
+        .select('title totalLikes createdAt')
+        .lean() as any,
+    ]);
+
+    const financialStats = await Promise.all([
+      WalletModel.findOne({ userId: creatorId }),
+      TransactionModel.aggregate([
+        { $match: { creatorId, status: 'succeeded' } },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: '$amount' },
+            monthlyRevenue: {
+              $sum: {
+                $cond: [{ $gte: ['$createdAt', past30d] }, '$amount', 0]
+              }
+            }
+          }
+        }
+      ]),
+      WalletTransactionModel.aggregate([
+        {
+          $match: {
+            relatedUserId: creatorId,
+            type: 'GIFT_RECEIVE',
+            status: 'COMPLETED'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalGifts: { $sum: '$amount' }
+          }
+        }
+      ]),
+    ]);
+
+    const [totalFollowers, newFollowers24h, newFollowers7d] = followerStats;
+    const [totalSubscribers, activeSubscribers, newSubscribers7d, membershipBreakdown] = subStats;
+    const [totalPosts, totalLikes, totalComments, topPosts] = engagementStats;
+    const [wallet, revenueStats, giftsStats] = financialStats;
+
+    // Enrich membership breakdown with names
+    const enrichedMembershipBreakdown = await Promise.all(
+      membershipBreakdown.map(async (item) => {
+        const membership = await MembershipModel.findById(item._id).select('name price').lean();
+        return {
+          membershipId: item._id,
+          name: membership?.name || 'Unknown tier',
+          price: membership?.price || '0',
+          count: item.count
+        };
+      })
+    );
+
     return {
-      totalEarnings: 0,
-      totalSubscribers: await SubscriptionModel.countDocuments({ creatorId, status: 'active' }),
-      totalFollowers: await FollowerModel.countDocuments({ userId: creatorId }),
-      totalViews: 0
+      overview: {
+        totalFollowers,
+        totalSubscribers,
+        activeSubscribers,
+        totalPosts,
+        walletBalanceUSD: wallet?.usdBalance || 0,
+        walletBalanceCoins: wallet?.coinBalance || 0
+      },
+      revenue: {
+        totalRevenueUSD: revenueStats[0]?.totalRevenue || 0,
+        monthlyRevenueUSD: revenueStats[0]?.monthlyRevenue || 0,
+        totalGiftsCoins: giftsStats[0]?.totalGifts || 0
+      },
+      engagement: {
+        totalLikes,
+        totalComments,
+        topPosts: topPosts.map((p: any) => ({
+          id: p._id.toString(),
+          title: p.title,
+          likes: p.totalLikes,
+          date: p.createdAt
+        }))
+      },
+      growth: {
+        newFollowers24h,
+        newFollowers7d,
+        newSubscribers7d
+      },
+      memberships: enrichedMembershipBreakdown
     };
   }
 

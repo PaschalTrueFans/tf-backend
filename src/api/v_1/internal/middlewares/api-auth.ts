@@ -13,9 +13,21 @@ export const jwtAuth = async (
   all = false,
 ): Promise<void | Response> => {
   try {
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
     Logger.Logger.info('jwtAuth middleware initialized...');
-    const token: string = req.headers['access-token']?.toString() || '';
-    Logger.Logger.info(`jwtAuth Token: ${token}`);
+    Logger.Logger.info(`jwtAuth Headers Keys: ${Object.keys(req.headers).join(', ')}`);
+    let token: string = req.headers['access-token']?.toString() || '';
+
+    if (!token && req.headers['authorization']) {
+      const authHeader = req.headers['authorization'].toString();
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+
+    Logger.Logger.info(`jwtAuth Token identified: ${token ? 'YES' : 'NO'}`);
 
     if (!token) {
       Logger.Logger.info('jwtAuth: No token provided');

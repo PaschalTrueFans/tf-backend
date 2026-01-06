@@ -13,8 +13,19 @@ export const jwtAdminAuth = async (
   all = false,
 ): Promise<void | Response> => {
   try {
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
     Logger.Logger.info('jwtAuth middleware initialized...');
-    const token: string = req.headers['access-token']?.toString() || '';
+    Logger.Logger.info(`jwtAdminAuth Headers Keys: ${Object.keys(req.headers).join(', ')}`);
+    let token: string = req.headers['access-token']?.toString() || '';
+
+    if (!token && req.headers['authorization']) {
+      const authHeader = req.headers['authorization'].toString();
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
 
     if (!token) return res.status(401).json({ Error: true, Msg: 'Unauthorized' });
 

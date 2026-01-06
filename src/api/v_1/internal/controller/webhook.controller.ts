@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Logger } from '../../../../helpers/logger';
 import { stripeService } from '../../../../helpers';
 import { UserService } from '../services/user.service';
+import { WalletService } from '../services/wallet.service';
 import { Db } from '../../../../database/db';
 import Stripe from 'stripe';
 
@@ -12,7 +13,7 @@ export class WebhookController {
 
   public stripeWebhook = async (req: Request, res: Response): Promise<void> => {
     const signature = req.headers['stripe-signature'] as string;
-    
+
     if (!signature) {
       Logger.error('Missing stripe-signature header');
       res.status(400).send('Missing stripe-signature header');
@@ -22,10 +23,10 @@ export class WebhookController {
     try {
       // Construct the event from the raw body and signature
       const event = stripeService.constructWebhookEvent(req.body, signature);
-      
-      Logger.info('Stripe webhook received', { 
-        eventType: event.type, 
-        eventId: event.id 
+
+      Logger.info('Stripe webhook received', {
+        eventType: event.type,
+        eventId: event.id
       });
 
       const db = res.locals.db as Db;
@@ -36,31 +37,31 @@ export class WebhookController {
         case 'checkout.session.completed':
           await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, userService);
           break;
-          
+
         case 'invoice.payment_succeeded':
           await this.handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice, userService);
           break;
-          
+
         case 'invoice.payment_failed':
           await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice, userService);
           break;
-          
+
         case 'customer.subscription.updated':
           await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription, userService);
           break;
-          
+
         case 'customer.subscription.deleted':
           await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription, userService);
           break;
-          
+
         case 'charge.succeeded':
           await this.handleChargeSucceeded(event.data.object as Stripe.Charge, userService);
           break;
-          
+
         case 'charge.updated':
           await this.handleChargeUpdated(event.data.object as Stripe.Charge, userService);
           break;
-          
+
         default:
           Logger.info('Unhandled webhook event type', { eventType: event.type });
       }
@@ -73,26 +74,54 @@ export class WebhookController {
   };
 
   private async handleCheckoutSessionCompleted(
-    session: Stripe.Checkout.Session, 
+    session: Stripe.Checkout.Session,
     userService: UserService
   ): Promise<void> {
     Logger.info('Processing checkout.session.completed', { sessionId: session.id, mode: session.mode });
 
     try {
-      const { userId, creatorId } = session.metadata || {};
-      
-      if (!userId || !creatorId) {
-        Logger.error('Missing metadata in checkout session', { sessionId: session.id });
+      const metadata = session.metadata || {};
+      const userId = metadata.userId;
+      const creatorId = metadata.creatorId;
+      const type = metadata.type;
+
+      if (!userId) {
+        Logger.error('Missing userId in checkout session', { sessionId: session.id });
+        return;
+      }
+
+      if (type === 'PURCHASE_COINS') {
+        const { coinAmount, usdCost } = metadata;
+        if (!coinAmount || !usdCost) {
+          Logger.error('Missing coinAmount or usdCost in PURCHASE_COINS session', { sessionId: session.id });
+          return;
+        }
+
+        const walletService = new WalletService({ db: userService['db'] }); // Accessing db from userService for now or pass it
+        await walletService.CreditWalletAfterPurchase(userId, parseInt(coinAmount), parseFloat(usdCost), session.id);
+
+        Logger.info('Wallet credited after coin purchase', { userId, coinAmount });
+        return;
+      }
+
+      if (!creatorId && session.mode !== 'payment') {
+        // userId is enough for simple payments like buy coins, but for subs we need creatorId
+        Logger.error('Missing creatorId in checkout session', { sessionId: session.id });
         return;
       }
 
       // Check if this is a product purchase (mode: 'payment') or subscription (mode: 'subscription')
       if (session.mode === 'payment') {
         // Handle product purchase
-        const { productId } = session.metadata || {};
-        
+        const { productId } = metadata;
+
         if (!productId) {
           Logger.error('Missing productId in checkout session metadata', { sessionId: session.id });
+          return;
+        }
+
+        if (!creatorId) {
+          Logger.error('Missing creatorId in product purchase session', { sessionId: session.id });
           return;
         }
 
@@ -106,11 +135,11 @@ export class WebhookController {
           try {
             const stripe = stripeService.getStripeInstance();
             paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-            chargeId = typeof paymentIntent.latest_charge === 'string' 
-              ? paymentIntent.latest_charge 
+            chargeId = typeof paymentIntent.latest_charge === 'string'
+              ? paymentIntent.latest_charge
               : paymentIntent.latest_charge?.id || null;
-            customerId = customerId || (typeof paymentIntent.customer === 'string' 
-              ? paymentIntent.customer 
+            customerId = customerId || (typeof paymentIntent.customer === 'string'
+              ? paymentIntent.customer
               : paymentIntent.customer?.id || null);
           } catch (error) {
             Logger.error('Error retrieving payment intent', error);
@@ -148,16 +177,16 @@ export class WebhookController {
           status: session.payment_status === 'paid' ? 'succeeded' : 'pending',
         });
 
-        Logger.info('Product purchase created successfully', { 
-          userId, 
-          creatorId, 
-          productId, 
-          sessionId: session.id 
+        Logger.info('Product purchase created successfully', {
+          userId,
+          creatorId,
+          productId,
+          sessionId: session.id
         });
       } else if (session.mode === 'subscription') {
         // Handle subscription (existing logic)
         const { membershipId } = session.metadata || {};
-        
+
         if (!membershipId) {
           Logger.error('Missing membershipId in checkout session', { sessionId: session.id });
           return;
@@ -171,7 +200,7 @@ export class WebhookController {
         }
 
         const stripeSubscription = await stripeService.getSubscription(subscriptionId);
-        
+
         // Create subscription in our database
         await userService.CreateSubscriptionFromStripe({
           subscriberId: userId,
@@ -183,11 +212,11 @@ export class WebhookController {
           startedAt: new Date(stripeSubscription.created * 1000),
         });
 
-        Logger.info('Subscription created successfully', { 
-          userId, 
-          creatorId, 
-          membershipId, 
-          subscriptionId 
+        Logger.info('Subscription created successfully', {
+          userId,
+          creatorId,
+          membershipId,
+          subscriptionId
         });
       }
     } catch (error) {
@@ -196,7 +225,7 @@ export class WebhookController {
   }
 
   private async handleInvoicePaymentSucceeded(
-    invoice: Stripe.Invoice, 
+    invoice: Stripe.Invoice,
     userService: UserService
   ): Promise<void> {
     Logger.info('Processing invoice.payment_succeeded', { invoiceId: invoice.id });
@@ -204,10 +233,10 @@ export class WebhookController {
     try {
       // Access subscription property safely - it can be string, Subscription object, or null
       const subscription = (invoice as any).subscription;
-      const subscriptionId = typeof subscription === 'string' 
-        ? subscription 
+      const subscriptionId = typeof subscription === 'string'
+        ? subscription
         : subscription?.id || null;
-      
+
       if (!subscriptionId) {
         Logger.info('No subscription ID found in invoice', { invoiceId: invoice.id });
         return;
@@ -215,10 +244,10 @@ export class WebhookController {
 
       // Update subscription status to active
       await userService.UpdateSubscriptionStatus(subscriptionId, 'active');
-      
+
       // Create transaction record
       await userService.CreateTransactionFromInvoice(invoice, subscriptionId);
-      
+
       Logger.info('Subscription status updated to active and transaction created', { subscriptionId });
     } catch (error) {
       Logger.error('Error handling invoice.payment_succeeded', error);
@@ -226,7 +255,7 @@ export class WebhookController {
   }
 
   private async handleInvoicePaymentFailed(
-    invoice: Stripe.Invoice, 
+    invoice: Stripe.Invoice,
     userService: UserService
   ): Promise<void> {
     Logger.info('Processing invoice.payment_failed', { invoiceId: invoice.id });
@@ -234,10 +263,10 @@ export class WebhookController {
     try {
       // Access subscription property safely - it can be string, Subscription object, or null
       const subscription = (invoice as any).subscription;
-      const subscriptionId = typeof subscription === 'string' 
-        ? subscription 
+      const subscriptionId = typeof subscription === 'string'
+        ? subscription
         : subscription?.id || null;
-      
+
       if (!subscriptionId) {
         Logger.info('No subscription ID found in invoice', { invoiceId: invoice.id });
         return;
@@ -245,7 +274,7 @@ export class WebhookController {
 
       // Update subscription status to past_due
       await userService.UpdateSubscriptionStatus(subscriptionId, 'past_due');
-      
+
       Logger.info('Subscription status updated to past_due', { subscriptionId });
     } catch (error) {
       Logger.error('Error handling invoice.payment_failed', error);
@@ -253,7 +282,7 @@ export class WebhookController {
   }
 
   private async handleSubscriptionUpdated(
-    subscription: Stripe.Subscription, 
+    subscription: Stripe.Subscription,
     userService: UserService
   ): Promise<void> {
     Logger.info('Processing customer.subscription.updated', { subscriptionId: subscription.id });
@@ -261,10 +290,10 @@ export class WebhookController {
     try {
       // Update subscription status
       await userService.UpdateSubscriptionStatus(subscription.id, subscription.status);
-      
-      Logger.info('Subscription status updated', { 
-        subscriptionId: subscription.id, 
-        status: subscription.status 
+
+      Logger.info('Subscription status updated', {
+        subscriptionId: subscription.id,
+        status: subscription.status
       });
     } catch (error) {
       Logger.error('Error handling customer.subscription.updated', error);
@@ -272,7 +301,7 @@ export class WebhookController {
   }
 
   private async handleSubscriptionDeleted(
-    subscription: Stripe.Subscription, 
+    subscription: Stripe.Subscription,
     userService: UserService
   ): Promise<void> {
     Logger.info('Processing customer.subscription.deleted', { subscriptionId: subscription.id });
@@ -280,7 +309,7 @@ export class WebhookController {
     try {
       // Mark subscription as canceled
       await userService.UpdateSubscriptionStatus(subscription.id, 'canceled', new Date());
-      
+
       Logger.info('Subscription marked as canceled', { subscriptionId: subscription.id });
     } catch (error) {
       Logger.error('Error handling customer.subscription.deleted', error);
@@ -306,10 +335,10 @@ export class WebhookController {
         charge.id,
         new Date(charge.created * 1000)
       );
-      
+
       await userService.UpdateTransactionBalanceStatus(charge.payment_intent, balanceStatus);
-      Logger.info('Transaction balance status updated', { 
-        chargeId: charge.id, 
+      Logger.info('Transaction balance status updated', {
+        chargeId: charge.id,
         paymentIntentId: charge.payment_intent,
         balanceStatus
       });
@@ -337,10 +366,10 @@ export class WebhookController {
         charge.id,
         new Date(charge.created * 1000)
       );
-      
+
       await userService.UpdateTransactionBalanceStatus(charge.payment_intent, balanceStatus);
-      Logger.info('Transaction balance status updated (charge.updated)', { 
-        chargeId: charge.id, 
+      Logger.info('Transaction balance status updated (charge.updated)', {
+        chargeId: charge.id,
         paymentIntentId: charge.payment_intent,
         balanceStatus
       });
