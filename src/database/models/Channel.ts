@@ -8,6 +8,11 @@ const ChannelSchema = new Schema(
         position: { type: Number, default: 0 },
         isPrivate: { type: Boolean, default: false },
         allowedRoles: [{ type: String, ref: 'CommunityRole' }], // Array of role IDs
+        accessConfig: {
+            requiresSubscription: { type: Boolean, default: false },
+            minTierId: { type: String, ref: 'Membership' },
+            allowedRoles: [{ type: String, ref: 'CommunityRole' }]
+        },
     },
     {
         timestamps: true,

@@ -6,7 +6,11 @@ const ChannelMessageSchema = new Schema(
         senderId: { type: String, required: true, ref: 'User' },
         content: { type: String, required: true },
         attachments: [{ type: String }],
-        replyToMessageId: { type: String, ref: 'ChannelMessage' },
+        type: { type: String, enum: ['text', 'poll', 'tip', 'product', 'system'], default: 'text' },
+        metadata: { type: Schema.Types.Mixed }, // Flexible storage for Poll ID, Product ID, Tip Amount
+        parentId: { type: String, ref: 'ChannelMessage' }, // Thread root
+        replyCount: { type: Number, default: 0 },
+        replyToMessageId: { type: String, ref: 'ChannelMessage' }, // Simple reply (legacy or quick reply)
         isEdited: { type: Boolean, default: false },
         isDeleted: { type: Boolean, default: false },
     },

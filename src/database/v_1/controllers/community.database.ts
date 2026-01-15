@@ -9,6 +9,10 @@ import { CommunityMemberModel } from '../../models/CommunityMember';
 import { ChannelMessageModel } from '../../models/ChannelMessage';
 import { NotificationModel } from '../../models/Notification';
 import { UserModel } from '../../models/User';
+import { PollModel, PollVoteModel } from '../../models/Poll';
+import { CommunityEventModel, EventRSVPModel } from '../../models/CommunityEvent';
+import { CommunityReportModel } from '../../models/CommunityReport';
+import { CommunityEmojiModel } from '../../models/CommunityEmoji';
 
 export class CommunityDatabase {
     private logger: typeof Logger;
@@ -73,6 +77,13 @@ export class CommunityDatabase {
     async GetCommunityById(communityId: string): Promise<any> {
         const comm = await CommunityModel.findById(communityId);
         return comm ? comm.toJSON() : null;
+    }
+
+    async GetJoinedCommunities(userId: string): Promise<any[]> {
+        const memberships = await CommunityMemberModel.find({ userId });
+        const communityIds = memberships.map((m: any) => m.communityId);
+        const communities = await CommunityModel.find({ _id: { $in: communityIds } });
+        return (communities as any[]).map(c => c.toJSON());
     }
 
     async ExploreCommunities(params: { search?: string; page: number; limit: number }): Promise<any> {
@@ -181,14 +192,19 @@ export class CommunityDatabase {
         const defaultRole = await CommunityRoleModel.findOne({ communityId, name: 'Member' }); // Simplistic convention
 
         // Check if already member
-        const existing = await CommunityMemberModel.findOne({ communityId, userId });
-        if (existing) return existing.toJSON();
+        let member: any = await CommunityMemberModel.findOne({ communityId, userId });
 
-        const member = await CommunityMemberModel.create({
-            communityId,
-            userId,
-            roles: defaultRole ? [defaultRole.id] : []
-        });
+        if (!member) {
+            member = await CommunityMemberModel.create({
+                communityId,
+                userId,
+                roles: defaultRole ? [defaultRole.id] : []
+            } as any);
+        }
+
+        // Always populate roles so the frontend receives permissions immediately
+        await member.populate('roles');
+
         return member.toJSON();
     }
 
@@ -349,5 +365,107 @@ export class CommunityDatabase {
                 count: l.count
             }))
         };
+    }
+
+    // Polls
+    async CreatePoll(data: { channelId: string; creatorId: string; question: string; options: string[]; endsAt?: Date }): Promise<any> {
+        const { channelId, creatorId, question, options, endsAt } = data;
+        const formattedOptions = options.map((opt, idx) => ({
+            id: new mongoose.Types.ObjectId().toString(),
+            text: opt,
+            voteCount: 0
+        }));
+
+        const poll = await PollModel.create({
+            channelId,
+            creatorId,
+            question,
+            options: formattedOptions,
+            endsAt
+        });
+
+        return poll.toJSON();
+    }
+
+    async VotePoll(pollId: string, userId: string, optionId: string): Promise<any> {
+        const session = await mongoose.startSession();
+        session.startTransaction();
+        try {
+            // Check if already voted
+            const existingVote = await PollVoteModel.findOne({ pollId, userId }).session(session);
+            if (existingVote) throw new AppError(400, 'Already voted on this poll');
+
+            // Record vote
+            await PollVoteModel.create([{ pollId, userId, optionId }], { session });
+
+            // Increment count
+            const poll = await PollModel.findOneAndUpdate(
+                { _id: pollId, 'options.id': optionId },
+                { $inc: { 'options.$.voteCount': 1 } },
+                { new: true, session }
+            );
+
+            if (!poll) throw new AppError(404, 'Poll or option not found');
+
+            await session.commitTransaction();
+            return poll.toJSON();
+        } catch (error: any) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            session.endSession();
+        }
+    }
+
+    async GetPoll(pollId: string): Promise<any> {
+        const poll = await PollModel.findById(pollId);
+        const p: any = poll;
+        return p ? p.toJSON() : null;
+    }
+
+    // Events
+    async CreateEvent(data: { communityId: string; creatorId: string; title: string; startTime: Date; endTime: Date; description?: string; location?: string }): Promise<any> {
+        const event = await CommunityEventModel.create(data);
+        return event.toJSON();
+    }
+
+    async GetEvents(communityId: string): Promise<any[]> {
+        const events = await CommunityEventModel.find({ communityId }).sort({ startTime: 1 });
+        return (events as any[]).map(e => e.toJSON());
+    }
+
+    async RSVPEvent(eventId: string, userId: string, status: string): Promise<any> {
+        // Upsert RSVP
+        const rsvp = await EventRSVPModel.findOneAndUpdate(
+            { eventId, userId },
+            { status },
+            { upsert: true, new: true }
+        );
+
+        // Update counts (Approximation: Ideally use aggregation or atomic increments if strict)
+        // For simplicity re-calc counts
+        const going = await EventRSVPModel.countDocuments({ eventId, status: 'going' });
+        const interested = await EventRSVPModel.countDocuments({ eventId, status: 'interested' });
+
+        await CommunityEventModel.findByIdAndUpdate(eventId, { goingCount: going, interestedCount: interested });
+
+        return rsvp.toJSON();
+    }
+
+    // Reporting
+    async ReportContent(data: { communityId: string; reporterId: string; targetId: string; targetType: string; reason: string }): Promise<any> {
+        const report = await CommunityReportModel.create(data);
+        return report.toJSON();
+    }
+
+    // Emojis
+    async AddEmoji(communityId: string, data: { name: string; code: string; url: string; uploadedBy: string }): Promise<any> {
+        const emoji = await CommunityEmojiModel.create({ ...data, communityId });
+        return emoji.toJSON();
+    }
+
+    async GetEmojis(communityId: string): Promise<any[]> {
+        const emojis = await CommunityEmojiModel.find({ communityId });
+        return (emojis as any[]).map(e => e.toJSON());
     }
 }
