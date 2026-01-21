@@ -171,11 +171,11 @@ export class UserController {
   public createPost = async (req: RequestBody<PostModel.CreatePostBody>, res: Response): Promise<void> => {
     let body;
     try {
-      await PostModel.CreatePostBodySchema.parseAsync(req.body);
+      const parsed = await PostModel.CreatePostBodySchema.parseAsync(req.body);
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const creatorId = req.userId;
-      const id = await service.CreatePost(creatorId, req.body);
+      const id = await service.CreatePost(creatorId, parsed);
 
       body = { data: { id } };
     } catch (error) {
@@ -187,11 +187,11 @@ export class UserController {
   public updatePost = async (req: RequestBody<PostModel.UpdatePostBody>, res: Response): Promise<void> => {
     let body;
     try {
-      await PostModel.UpdatePostBodySchema.parseAsync(req.body);
+      const parsed = await PostModel.UpdatePostBodySchema.parseAsync(req.body);
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const postId = req.params.id;
-      const row = await service.UpdatePost(postId, req.body);
+      const row = await service.UpdatePost(postId, parsed);
       body = { data: row };
     } catch (error) {
       genericError(error, res);
@@ -318,11 +318,11 @@ export class UserController {
   public createMembership = async (req: RequestBody<UserModel.CreateMembershipBody>, res: Response): Promise<void> => {
     let body;
     try {
-      await UserModel.CreateMembershipBodySchema.parseAsync(req.body);
+      const parsed = await UserModel.CreateMembershipBodySchema.parseAsync(req.body);
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const creatorId = req.userId;
-      const id = await service.CreateMembership(creatorId, req.body);
+      const id = await service.CreateMembership(creatorId, parsed);
 
       body = { data: { id } };
     } catch (error) {
@@ -379,12 +379,12 @@ export class UserController {
   public updateMembership = async (req: RequestBody<UserModel.UpdateMembershipBody>, res: Response): Promise<void> => {
     let body;
     try {
-      await UserModel.UpdateMembershipBodySchema.parseAsync(req.body);
+      const parsed = await UserModel.UpdateMembershipBodySchema.parseAsync(req.body);
       const db = res.locals.db as Db;
       const service = new UserService({ db });
       const membershipId = req.params.id;
       const creatorId = req.userId;
-      const membership = await service.UpdateMembership(membershipId, creatorId, req.body);
+      const membership = await service.UpdateMembership(membershipId, creatorId, parsed);
       body = { data: membership };
     } catch (error) {
       genericError(error, res);

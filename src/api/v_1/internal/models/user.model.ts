@@ -82,9 +82,10 @@ export interface UserResponse extends DefaultTable {
 export const CreateMembershipBodySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   price: z.string().min(1, 'Price is required'),
-  currency: z.string().min(1, 'Currency is required').default('NGN'),
+  currency: z.string().min(1, 'Currency is required').default('USD'),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
+  tier: z.coerce.number().min(1).max(3).default(1),
 });
 
 export type CreateMembershipBody = z.infer<typeof CreateMembershipBodySchema>;
@@ -95,6 +96,7 @@ export const UpdateMembershipBodySchema = z.object({
   currency: z.string().min(1, 'Currency is required').optional(),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
+  tier: z.coerce.number().min(1).max(3).optional(),
 });
 
 export type UpdateMembershipBody = z.infer<typeof UpdateMembershipBodySchema>;

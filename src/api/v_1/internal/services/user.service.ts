@@ -216,6 +216,9 @@ export class UserService {
     const memeberships = await this.db.v1.User.GetMembershipsOfCreatorForUser(creatorId, currentUserId);
     const products = await this.db.v1.User.GetProductsByCreatorWithPurchaseStatus(creatorId, currentUserId);
     const events = await this.db.v1.User.GetEventsByCreator(creatorId, currentUserId);
+    const activeMembership = memeberships.find((m: any) => m.isSubscribed);
+    const userMembershipId = activeMembership ? activeMembership.id : null;
+
     return {
       id: creator.id,
       pageName: creator.pageName,
@@ -238,18 +241,46 @@ export class UserService {
       category: creator.category || 'music',
       totalPosts: recentPosts.length,
       memberships: memeberships,
-      recentPosts: recentPosts.map((post: any) => ({
-        id: post.id,
-        title: post.title,
-        createdAt: post.createdAt,
-        public: (post.accessType || 'free') === 'free',
-        totalLikes: parseInt(post.totalLikes) || 0,
-        totalComments: parseInt(post.totalComments) || 0,
-        mediaFiles: post.mediaFiles || [],
-      })),
+      recentPosts: recentPosts.map((post: any) => {
+        const requiredTier = post.requiredTier || 0;
+        const userTier = activeMembership?.tier || 0;
+
+        let isLocked = false;
+        if (requiredTier > 0 || post.accessType !== 'free') {
+          if (!userMembershipId) {
+            isLocked = true;
+          } else {
+            // Tier check: access if userTier >= requiredTier
+            const tierPassed = userTier >= requiredTier;
+
+            // Legacy check: access if membershipId is specifically allowed
+            const idAllowed = post.allowedMembershipIds && post.allowedMembershipIds.length > 0 && post.allowedMembershipIds.includes(userMembershipId);
+
+            if (!tierPassed && !idAllowed) {
+              // Special Case: All Members (requiredTier 0 but premium)
+              if (requiredTier === 0 && (!post.allowedMembershipIds || post.allowedMembershipIds.length === 0)) {
+                isLocked = false;
+              } else {
+                isLocked = true;
+              }
+            }
+          }
+        }
+
+        return {
+          id: post.id,
+          title: post.title,
+          createdAt: post.createdAt,
+          public: post.accessType === 'free',
+          totalLikes: parseInt(post.totalLikes) || 0,
+          totalComments: parseInt(post.totalComments) || 0,
+          mediaFiles: isLocked ? [] : (post.mediaFiles || []),
+          isLocked,
+          requiredTier
+        };
+      }),
       products: products,
       events: events,
-
     }
   }
 
@@ -270,6 +301,9 @@ export class UserService {
     const memeberships = await this.db.v1.User.GetMembershipsOfCreatorForUser(creator.id, currentUserId);
     const products = await this.db.v1.User.GetProductsByCreatorWithPurchaseStatus(creator.id, currentUserId);
     const events = await this.db.v1.User.GetEventsByCreator(creator.id, currentUserId);
+    const activeMembership = memeberships.find((m: any) => m.isSubscribed);
+    const userMembershipId = activeMembership ? activeMembership.id : null;
+
     return {
       id: creator.id,
       pageName: creator.pageName,
@@ -292,18 +326,46 @@ export class UserService {
       category: creator.category || 'music',
       totalPosts: recentPosts.length,
       memberships: memeberships,
-      recentPosts: recentPosts.map((post: any) => ({
-        id: post.id,
-        title: post.title,
-        createdAt: post.createdAt,
-        public: (post.accessType || 'free') === 'free',
-        totalLikes: parseInt(post.totalLikes) || 0,
-        totalComments: parseInt(post.totalComments) || 0,
-        mediaFiles: post.mediaFiles || [],
-      })),
+      recentPosts: recentPosts.map((post: any) => {
+        const requiredTier = post.requiredTier || 0;
+        const userTier = activeMembership?.tier || 0;
+
+        let isLocked = false;
+        if (requiredTier > 0 || post.accessType !== 'free') {
+          if (!userMembershipId) {
+            isLocked = true;
+          } else {
+            // Tier check: access if userTier >= requiredTier
+            const tierPassed = userTier >= requiredTier;
+
+            // Legacy check: access if membershipId is specifically allowed
+            const idAllowed = post.allowedMembershipIds && post.allowedMembershipIds.length > 0 && post.allowedMembershipIds.includes(userMembershipId);
+
+            if (!tierPassed && !idAllowed) {
+              // Special Case: All Members (requiredTier 0 but premium)
+              if (requiredTier === 0 && (!post.allowedMembershipIds || post.allowedMembershipIds.length === 0)) {
+                isLocked = false;
+              } else {
+                isLocked = true;
+              }
+            }
+          }
+        }
+
+        return {
+          id: post.id,
+          title: post.title,
+          createdAt: post.createdAt,
+          public: post.accessType === 'free',
+          totalLikes: parseInt(post.totalLikes) || 0,
+          totalComments: parseInt(post.totalComments) || 0,
+          mediaFiles: isLocked ? [] : (post.mediaFiles || []),
+          isLocked,
+          requiredTier
+        };
+      }),
       products: products,
       events: events,
-
     }
   }
 
@@ -370,6 +432,7 @@ export class UserService {
       content: body.content,
       accessType: body.accessType ?? 'free',
       allowedMembershipIds: body.allowedMembershipIds,
+      requiredTier: body.requiredTier ?? 0,
       tags: body.tags,
     };
     const mediaFiles = body.mediaFiles?.map((m) => ({
@@ -545,7 +608,7 @@ export class UserService {
     const posts = paginatedPosts.map((r: any) => ({
       postId: r.postId,
       postTitle: r.postTitle,
-      content: this.stripHtmlAndTruncate(r.content, 100),
+      content: r.isLocked ? "" : this.stripHtmlAndTruncate(r.content, 100),
       createdAt: r.createdAt,
       tags: r.tags || [],
       attachedMedia: r.attachedMedia || [],
@@ -555,6 +618,10 @@ export class UserService {
       totalLikes: parseInt(r.totalLikes) || 0,
       totalComments: parseInt(r.totalComments) || 0,
       isLiked: r.isLiked || false,
+      isLocked: r.isLocked || false,
+      accessType: r.accessType,
+      allowedMembershipIds: r.allowedMembershipIds || [],
+      requiredTier: r.requiredTier || 0,
     }));
 
     return {
@@ -612,9 +679,10 @@ export class UserService {
         updatedAt: row.updatedAt,
         creatorId: row.creatorId,
         title: row.title,
-        content: this.stripHtmlAndTruncate(row.content, 200), // Show preview
+        content: "", // Hide full content
         accessType: row.accessType,
         allowedMembershipIds: row.allowedMembershipIds,
+        requiredTier: row.requiredTier || 0,
         tags: row.tags,
         totalLikes: parseInt(row.totalLikes) || 0,
         isLiked: isLiked,
@@ -636,6 +704,7 @@ export class UserService {
       content: row.content,
       accessType: row.accessType,
       allowedMembershipIds: row.allowedMembershipIds,
+      requiredTier: row.requiredTier || 0,
       tags: row.tags,
       totalLikes: parseInt(row.totalLikes) || 0,
       isLiked: isLiked,
@@ -666,29 +735,32 @@ export class UserService {
 
   // Helper to check if user has access to post
   private async hasAccessToPost(userId: string, post: any, creatorId: string): Promise<boolean> {
-    // 1. If post is free, everyone has access
-    if (post.accessType === 'free') return true;
-
-    // 2. If user is the creator, they have access
+    // 0. If user is the creator, they have access
     if (userId === creatorId) return true;
 
-    // 3. If no specific memberships required, but it is premium... (assuming basic verification checks 'premium' status if implemented, but here we focus on tiers)
-    // If allowedMembershipIds is empty or undefined, and accessType is premium, maybe it means ANY paid sub?
-    // For now, let's assume if it has specific IDs, we check those.
-    if (!post.allowedMembershipIds || post.allowedMembershipIds.length === 0) {
-      // If allowedMembershipIds is empty, but accessType is not 'free',
-      // it implies any active subscription to the creator grants access.
-      const subscription = await this.db.v1.User.GetSubscriptionByUserAndCreator(userId, creatorId);
-      return !!(subscription && subscription.isActive);
-    }
+    // 1. Check requiredTier (0 means public)
+    const requiredTier = post.requiredTier || 0;
+    if (requiredTier === 0 && (post.accessType === 'free' || !post.accessType)) return true;
 
-    // 4. Check specific membership tiers
+    // 2. If it's not free/public, we need a subscription
     const subscription = await this.db.v1.User.GetSubscriptionByUserAndCreator(userId, creatorId);
-
     if (!subscription || !subscription.isActive) return false;
 
-    // Check if their membership ID maps to one of the allowed ones
-    return post.allowedMembershipIds.includes(subscription.membershipId);
+    // 3. Check tiered access
+    const membership = await this.db.v1.User.GetMembershipById(subscription.membershipId);
+    const userTier = membership?.tier || 1; // Default to tier 1 if not set
+
+    if (userTier >= requiredTier) return true;
+
+    // 4. Fallback to legacy allowedMembershipIds if tier check didn't pass or isn't applicable
+    if (post.allowedMembershipIds && post.allowedMembershipIds.length > 0) {
+      return post.allowedMembershipIds.includes(subscription.membershipId);
+    }
+
+    // 5. If no specific membershipIds and tier was not enough, but it is premium post
+    // If requiredTier was > 0 and userTier was < requiredTier, we already failed above.
+
+    return false;
   }
 
   async GetAllMyPosts(userId: string, page: number = 1, limit: number = 10): Promise<{
@@ -787,7 +859,7 @@ export class UserService {
       // Calculate price with platform fee for Stripe
       const originalPrice = parseFloat(body.price);
       const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
-      const currency = body.currency?.toLowerCase() || 'ngn';
+      const currency = body.currency?.toLowerCase() || 'usd';
 
       Logger.info('UserService.CreateMembership - Price calculation', {
         originalPrice,
@@ -797,7 +869,7 @@ export class UserService {
       });
 
       // Create Stripe price with the total amount (original price + platform fee)
-      // Note: Stripe expects amount in smallest currency unit (kobo for NGN)
+      // Note: Stripe expects amount in smallest currency unit (cents for USD)
       // createPrice handles the conversion (amount * 100)
       const stripePrice = await stripeService.createPrice(
         stripeProduct.id,
@@ -817,13 +889,14 @@ export class UserService {
         creatorId,
         name: body.name,
         price: body.price, // Store original price for display
-        currency: body.currency || 'NGN',
+        currency: body.currency || 'USD',
         description: body.description,
         imageUrl: body.imageUrl,
         stripeProductId: stripeProduct.id,
         stripePriceId: stripePrice.id,
         platformFee: platformFee, // Store platform fee percentage
         priceWithFee: priceWithFee, // Store price with fee for reference
+        tier: body.tier || 1,
       };
 
       const id = await this.db.v1.User.CreateMembership(membership);
@@ -882,11 +955,12 @@ export class UserService {
       name: body.name,
       description: body.description,
       imageUrl: body.imageUrl,
+      tier: body.tier,
     };
 
     // If price or currency is being updated, we need to create a new Stripe Price
     const newPrice = body.price || membership.price;
-    const newCurrency = (body.currency || membership.currency || 'ngn').toLowerCase();
+    const newCurrency = (body.currency || membership.currency || 'usd').toLowerCase();
 
     // Check if either changed
     const priceChanged = body.price && body.price !== membership.price;
@@ -986,7 +1060,7 @@ export class UserService {
       // Calculate price with platform fee for Stripe
       const originalPrice = parseFloat(body.price);
       const priceWithFee = this.calculatePriceWithPlatformFee(originalPrice, platformFee);
-      const currency = 'ngn'; // Default to NGN for products
+      const currency = 'usd'; // Default to USD for products
 
       Logger.info('UserService.CreateProduct - Price calculation', {
         originalPrice,
@@ -996,7 +1070,7 @@ export class UserService {
       });
 
       // Create Stripe price with the total amount (original price + platform fee)
-      // Note: Stripe expects amount in smallest currency unit (kobo for NGN)
+      // Note: Stripe expects amount in smallest currency unit (cents for USD)
       // createOneTimePrice handles the conversion (amount * 100)
       const stripePrice = await stripeService.createOneTimePrice(
         stripeProduct.id,
@@ -1170,7 +1244,7 @@ export class UserService {
         const newStripePrice = await stripeService.createOneTimePrice(
           product.stripeProductId,
           priceWithFee,
-          'ngn'
+          'usd'
         );
 
         // Update the product with the new Stripe price ID and platform fee info

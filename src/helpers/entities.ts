@@ -104,6 +104,7 @@ export interface Post extends DefaultTable {
   totalLikes: number;
   mediaFiles?: PostMediaFile[] | null;
   allowedMembershipIds?: string[];
+  requiredTier?: number;
 }
 
 export interface PostMediaFile extends DefaultTable {
@@ -131,6 +132,7 @@ export interface Membership extends DefaultTable {
   stripePriceId?: string;
   platformFee?: number;
   priceWithFee?: number;
+  tier?: number;
 }
 
 export interface Product extends DefaultTable {
@@ -304,4 +306,14 @@ export interface WalletTransaction extends DefaultTable {
   relatedUserId?: string;
   status: TransactionStatus;
   metadata?: any;
+}
+
+export interface Channel extends DefaultTable {
+  communityId: string;
+  name: string;
+  type?: 'text' | 'voice' | 'announcement';
+  position?: number;
+  isPrivate?: boolean;
+  allowedMembershipIds?: string[];
+  requiredTier?: number;
 }

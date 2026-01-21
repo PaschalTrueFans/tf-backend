@@ -55,6 +55,7 @@ const MembershipSchema = new Schema(
         stripePriceId: { type: String },
         platformFee: { type: Number },
         priceWithFee: { type: Number },
+        tier: { type: Number, enum: [1, 2, 3], default: 1 }, // Tier level: 1 (lowest), 2, 3
     },
     {
         timestamps: true,

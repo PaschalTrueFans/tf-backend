@@ -138,7 +138,8 @@ export class CommunityController {
             const db = res.locals.db as Db;
             const userId = req.userId;
             const { communityId } = req.params;
-            const { name, type, isPrivate } = req.body;
+            const { name, type, isPrivate, allowedMembershipIds } = req.body;
+            const requiredTier = req.body.requiredTier ? Number(req.body.requiredTier) : 0;
 
             // Permission check
             const comm = await db.v1.Community.GetCommunityById(communityId);
@@ -148,7 +149,7 @@ export class CommunityController {
                 return;
             }
 
-            const channel = await db.v1.Community.CreateChannel(communityId, { name, type, isPrivate });
+            const channel = await db.v1.Community.CreateChannel(communityId, { name, type, isPrivate, allowedMembershipIds, requiredTier });
             body = { data: channel };
         } catch (error) {
             genericError(error, res);
@@ -161,10 +162,56 @@ export class CommunityController {
         let body;
         try {
             const db = res.locals.db as Db;
+            const userId = req.userId;
             const { communityId } = req.params;
-            // TODO: Filter based on user roles/access
+
+            const community = await db.v1.Community.GetCommunityById(communityId);
+            if (!community) {
+                res.status(404).json({ error: 'Community not found' });
+                return;
+            }
+
             const channels = await db.v1.Community.GetChannels(communityId);
-            body = { data: channels };
+
+            // If user is creator, show all
+            if (community.creatorId === userId) {
+                body = { data: channels };
+            } else {
+                // Get user's active subscription for this creator
+                const subscription = await db.v1.User.GetSubscriptionByUserAndCreator(userId, community.creatorId);
+                const userMembershipId = subscription ? subscription.membershipId : null;
+
+                let userTier = 0;
+                if (userMembershipId) {
+                    const membership = await db.v1.User.GetMembershipById(userMembershipId);
+                    userTier = membership?.tier || 1;
+                }
+
+                // Filter channels
+                const filteredChannels = channels.filter((channel: any) => {
+                    const requiredTier = channel.requiredTier || 0;
+
+                    // 1. Level 0 (Public)
+                    if (requiredTier === 0 && (!channel.allowedMembershipIds || channel.allowedMembershipIds.length === 0)) {
+                        return true;
+                    }
+
+                    // Must be a subscriber for any level above 0 or if IDs are specified
+                    if (!userMembershipId) return false;
+
+                    // 2. Hierarchical Tier Check
+                    if (requiredTier > 0 && userTier >= requiredTier) return true;
+
+                    // 3. Specific ID Check (Legacy/Manual)
+                    if (channel.allowedMembershipIds && channel.allowedMembershipIds.includes(userMembershipId)) {
+                        return true;
+                    }
+
+                    return false;
+                });
+
+                body = { data: filteredChannels };
+            }
         } catch (error) {
             genericError(error, res);
             return;

@@ -164,7 +164,7 @@ export class CommunityDatabase {
     }
 
     // Channels
-    async CreateChannel(communityId: string, data: { name: string; type?: string; isPrivate?: boolean }): Promise<any> {
+    async CreateChannel(communityId: string, data: { name: string; type?: string; isPrivate?: boolean; allowedMembershipIds?: string[]; requiredTier?: number }): Promise<any> {
         const count = await ChannelModel.countDocuments({ communityId });
         const channel = await ChannelModel.create({ ...data, communityId, position: count });
         return channel.toJSON();

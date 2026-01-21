@@ -73,7 +73,7 @@ class StripeService {
   async createOneTimePrice(
     productId: string,
     amount: number,
-    currency = 'ngn'
+    currency = 'usd'
   ): Promise<Stripe.Price> {
     try {
       Logger.info('StripeService.createOneTimePrice', { productId, amount, currency });

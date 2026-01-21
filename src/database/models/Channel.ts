@@ -8,6 +8,8 @@ const ChannelSchema = new Schema(
         position: { type: Number, default: 0 },
         isPrivate: { type: Boolean, default: false },
         allowedRoles: [{ type: String, ref: 'CommunityRole' }], // Array of role IDs
+        allowedMembershipIds: [{ type: String }], // Array of Membership IDs allowed to access this channel
+        requiredTier: { type: Number, default: 0 }, // 0: Public, 1: Tier 1+, 2: Tier 2+, 3: Tier 3
         accessConfig: {
             requiresSubscription: { type: Boolean, default: false },
             minTierId: { type: String, ref: 'Membership' },

@@ -8,6 +8,7 @@ const PostSchema = new Schema(
         content: { type: String, required: true },
         accessType: { type: String, default: 'free', enum: ['free', 'premium'] },
         allowedMembershipIds: [{ type: String }],
+        requiredTier: { type: Number, default: 0 }, // 0: Public, 1: Tier 1+, 2: Tier 2+, 3: Tier 3
         tags: [{ type: String }],
         totalLikes: { type: Number, default: 0 },
         mediaFiles: [{

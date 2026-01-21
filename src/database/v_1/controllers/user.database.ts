@@ -336,34 +336,78 @@ export class UserDatabase {
     const follows = await FollowerModel.find({ followerId: userId }).select('userId');
     const followedIds = follows.map(f => f.userId);
 
-    // 2. Find posts from these creators
+    // 2. Find posts from these creators (include both free and premium)
     const posts = await PostModel.find({
-      creatorId: { $in: followedIds },
-      accessType: 'free'
+      creatorId: { $in: followedIds }
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
-    // 3. Enrich posts with creator info
+    // 3. Get user's active subscriptions for these creators and their membership tiers
+    const subscriptions = await SubscriptionModel.find({
+      subscriberId: userId,
+      creatorId: { $in: followedIds },
+      status: 'active'
+    }).lean();
+
+    const membershipIds = (subscriptions as any[]).map(s => s.membershipId);
+    const memberships = await MembershipModel.find({ _id: { $in: membershipIds } }).lean();
+    const membershipTierMap = new Map((memberships as any[]).map(m => [m._id.toString(), m.tier || 1]));
+    const subscriptionMap = new Map((subscriptions as any[]).map(s => [s.creatorId, s.membershipId]));
+
+    // 4. Enrich posts with creator info and access status
     const enrichedPosts = await Promise.all((posts as any[]).map(async (p) => {
       const creator = await UserModel.findById(p.creatorId).select('profilePhoto pageName').lean();
       const totalLikes = await LikeModel.countDocuments({ postId: p._id.toString() });
 
+      const userMembershipId = subscriptionMap.get(p.creatorId);
+      const userTier = userMembershipId ? membershipTierMap.get(userMembershipId) || 1 : 0;
+      const requiredTier = p.requiredTier || 0;
+
+      let isLocked = false;
+      if (requiredTier > 0 || p.accessType !== 'free') {
+        if (!userMembershipId) {
+          isLocked = true;
+        } else {
+          // Tier check: access if userTier >= requiredTier
+          const tierPassed = userTier >= requiredTier;
+
+          // Legacy check: access if membershipId is specifically allowed
+          const idAllowed = p.allowedMembershipIds && p.allowedMembershipIds.length > 0 && p.allowedMembershipIds.includes(userMembershipId);
+
+          // Granted if either tier is high enough OR specific ID is allowed
+          // If neither, then it's locked.
+          if (!tierPassed && !idAllowed) {
+            // Special Case: if allowedMembershipIds is empty but it is premium, any sub usually works (tier 1 is >= requiredTier 1)
+            // But if requiredTier is say 2, and userTier is 1, tierPassed is false.
+            if (requiredTier === 0 && (!p.allowedMembershipIds || p.allowedMembershipIds.length === 0)) {
+              isLocked = false;
+            } else {
+              isLocked = true;
+            }
+          }
+        }
+      }
+
       return {
         postId: p._id.toString(),
         postTitle: p.title,
-        content: p.content,
+        content: isLocked ? "" : p.content,
         createdAt: p.createdAt,
         tags: p.tags,
         totalLikes,
         creatorId: p.creatorId,
         creatorImage: creator?.profilePhoto,
         pageName: creator?.pageName,
-        totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }), // might as well fix comments count too if placeholder was 0
-        attachedMedia: (p.mediaFiles as any)?.map((m: any) => m.url) || [],
-        isLiked: await LikeModel.exists({ postId: p._id.toString(), userId }) // Update isLiked logic? The original used placeholder false
+        totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }),
+        attachedMedia: isLocked ? [] : ((p.mediaFiles as any)?.map((m: any) => m.url) || []),
+        isLiked: await LikeModel.exists({ postId: p._id.toString(), userId }),
+        isLocked,
+        accessType: p.accessType,
+        allowedMembershipIds: p.allowedMembershipIds || [],
+        requiredTier: p.requiredTier || 0,
       };
     }));
 
@@ -381,6 +425,7 @@ export class UserDatabase {
       title: p.title,
       createdAt: p.createdAt,
       accessType: p.accessType,
+      allowedMembershipIds: p.allowedMembershipIds || [],
       totalLikes: await LikeModel.countDocuments({ postId: p._id.toString() }),
       totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }),
       mediaFiles: (p.mediaFiles as any)?.map((m: any) => m.url) || []
@@ -417,7 +462,8 @@ export class UserDatabase {
         pageName: creator?.pageName,
         totalComments: await CommentModel.countDocuments({ postId: p._id.toString() }),
         attachedMedia: (p.mediaFiles as any)?.map((m: any) => m.url) || [],
-        isLiked: await LikeModel.exists({ postId: p._id.toString(), userId })
+        isLiked: await LikeModel.exists({ postId: p._id.toString(), userId }),
+        isLocked: false
       };
     }));
 
@@ -937,32 +983,54 @@ export class UserDatabase {
     const p = await ProductPurchaseModel.findOne({ userId, productId, status: 'completed' });
     return p ? (p.toJSON() as Entities.ProductPurchase) : null;
   }
-  async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<Entities.Post[]> {
+  async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
     const subs = await SubscriptionModel.find({ subscriberId: userId, status: 'active' }).select('creatorId membershipId');
-    const creatorIds = subs.map(s => s.creatorId);
-    const membershipIds = subs.map(s => s.membershipId);
+    const membershipIds = (subs as any[]).map(s => s.membershipId);
+    const creatorIds = (subs as any[]).map(s => s.creatorId);
+
+    // Get the tiers of these memberships
+    const memberships = await MembershipModel.find({ _id: { $in: membershipIds } }).select('tier');
+    const membershipTiers = (memberships as any[]).map(m => m.tier || 1);
+    const maxTier = membershipTiers.length > 0 ? Math.max(...membershipTiers) : 0;
 
     const posts = await PostModel.find({
       creatorId: { $in: creatorIds },
-      accessType: 'premium',
       $or: [
+        // Match specific IDs (Legacy)
         { allowedMembershipIds: { $in: membershipIds } },
-        { allowedMembershipIds: { $size: 0 } },
-        { allowedMembershipIds: { $exists: false } }
+        // Match by Hierarchical Tier
+        { requiredTier: { $lte: maxTier, $gt: 0 } },
+        // Any premium post with no specific restriction (All Members)
+        {
+          accessType: 'premium',
+          requiredTier: { $in: [0, null] },
+          $or: [
+            { allowedMembershipIds: { $size: 0 } },
+            { allowedMembershipIds: { $exists: false } }
+          ]
+        }
       ]
     })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
 
-    // Enrich with real-time like count
-    return Promise.all(posts.map(async (p) => {
+    // Enrich with real-time like count and other needed fields
+    return Promise.all(posts.map(async (p: any) => {
+      const creator = await UserModel.findById(p.creatorId).select('profilePhoto pageName').lean();
       const totalLikes = await LikeModel.countDocuments({ postId: p.id });
       return {
         ...p.toJSON(),
+        postId: p.id,
         id: p.id,
-        totalLikes
-      } as Entities.Post;
+        totalLikes,
+        creatorImage: creator?.profilePhoto,
+        pageName: creator?.pageName,
+        totalComments: await CommentModel.countDocuments({ postId: p.id }),
+        attachedMedia: (p.mediaFiles as any)?.map((m: any) => m.url) || [],
+        isLiked: await LikeModel.exists({ postId: p.id, userId }),
+        isLocked: false
+      };
     }));
   }
 
