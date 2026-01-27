@@ -76,6 +76,7 @@ export interface UserResponse extends DefaultTable {
   bio: string | null;
   profilePhoto: string | null;
   creator: CreatorProfile | null;
+  subscribedMemberships?: any[];
 }
 
 // Membership schemas

@@ -6,12 +6,13 @@ const WalletTransactionSchema = new Schema(
         walletId: { type: String, required: true, ref: 'Wallet' },
         type: {
             type: String,
-            enum: ['DEPOSIT', 'WITHDRAWAL', 'PURCHASE_COINS', 'GIFT_SEND', 'GIFT_RECEIVE'],
+            enum: ['DEPOSIT', 'WITHDRAWAL', 'PURCHASE_COINS', 'GIFT_SEND', 'GIFT_RECEIVE', 'PRODUCT_SALE'],
             required: true
         },
         amount: { type: Number, required: true },
         currency: { type: String, enum: ['USD', 'COIN'], required: true },
         relatedUserId: { type: String, ref: 'User' },
+        orderId: { type: String, ref: 'Order' },  // Link to order for product sales
         status: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED'], default: 'PENDING' },
         metadata: { type: Schema.Types.Mixed },
     },

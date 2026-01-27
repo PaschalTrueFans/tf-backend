@@ -496,6 +496,150 @@ export class UserController {
     res.json(body);
   };
 
+  // Order & Store handlers
+  public createProductCheckoutSession = async (req: RequestBody<{ productId: string; successUrl: string; cancelUrl: string; guestEmail?: string; guestName?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const { productId, successUrl, cancelUrl, guestEmail, guestName } = req.body;
+      const userId = req.userId; // Nullable if guest (via optional auth middleware?)
+
+      // If no userId and no guestEmail, error
+      if (!userId && !guestEmail) {
+        throw new BadRequest('User ID or Guest Email is required');
+      }
+
+      const response = await service.CreateProductCheckoutSession(
+        userId || null,
+        productId,
+        successUrl,
+        cancelUrl,
+        guestEmail,
+        guestName
+      );
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getCreatorStore = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.params.creatorId;
+      const response = await service.GetCreatorStore(creatorId);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getMyOrders = async (req: RequestQuery<{ page?: string; limit?: string; status?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '10', 10);
+      const status = req.query.status;
+
+      const response = await service.GetMyOrders(userId, page, limit, status);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getCreatorSales = async (req: RequestQuery<{ page?: string; limit?: string; status?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const creatorId = req.userId;
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '10', 10);
+      const status = req.query.status;
+
+      const response = await service.GetCreatorSales(creatorId, page, limit, status);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getOrderById = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const orderId = req.params.orderId;
+      const currentUserId = req.userId;
+      // TODO: If we support guest order lookup, we need a way to verify guest identity (e.g. magic link token)
+      // For now assume signed in user access
+      const response = await service.GetOrderById(orderId, currentUserId);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public updateOrderStatus = async (req: RequestBody<{ status: string; trackingNumber?: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const orderId = req.params.orderId;
+      const creatorId = req.userId;
+      const { status, trackingNumber } = req.body;
+
+      if (!status) throw new BadRequest('Status is required');
+
+      const response = await service.UpdateOrderStatus(creatorId, orderId, status, trackingNumber);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getPurchasedDigitalProducts = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const response = await service.GetPurchasedDigitalProducts(userId);
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
+  public getDigitalProductDownloadLink = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new UserService({ db });
+      const userId = req.userId;
+      const productId = req.params.productId;
+      const link = await service.GetDigitalProductDownloadLink(userId, productId);
+      body = { data: { downloadUrl: link } };
+    } catch (error) {
+      genericError(error, res);
+    }
+    res.json(body);
+  };
+
   // Event CRUD handlers
   public createEvent = async (req: RequestBody<UserModel.CreateEventBody>, res: Response): Promise<void> => {
     let body;
@@ -1098,27 +1242,7 @@ export class UserController {
     res.json(body);
   };
 
-  public createProductCheckoutSession = async (req: RequestBody<UserModel.CreateProductCheckoutSessionBody>, res: Response): Promise<void> => {
-    let body;
-    try {
-      await UserModel.CreateProductCheckoutSessionBodySchema.parseAsync(req.body);
-      const db = res.locals.db as Db;
-      const service = new UserService({ db });
-      const userId = req.userId;
 
-      const { productId, successUrl, cancelUrl } = req.body;
-      const session = await service.CreateProductCheckoutSession(userId, productId, successUrl, cancelUrl);
-
-      body = {
-        data: session,
-        message: 'Product checkout session created successfully'
-      };
-    } catch (error) {
-      genericError(error, res);
-      return;
-    }
-    res.json(body);
-  };
 
   public checkProductPurchase = async (req: Request, res: Response): Promise<void> => {
     let body;

@@ -5,7 +5,9 @@ import { Logger } from '../helpers/logger';
 export class MongoDb {
     private static instance: MongoDb;
 
-    private constructor() { }
+    private constructor() {
+        // Private constructor for singleton
+    }
 
     public static get Instance(): MongoDb {
         if (!this.instance) {

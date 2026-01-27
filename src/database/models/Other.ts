@@ -105,7 +105,7 @@ const ProductSchema = new Schema(
         creatorId: { type: String, required: true, ref: 'User' },
         name: { type: String, required: true },
         description: { type: String },
-        mediaUrl: { type: String },
+        mediaUrl: { type: String }, // Preview image/thumbnail
         accessType: { type: String, default: 'free', enum: ['free', 'premium'] },
         allowedMembershipIds: [{ type: String }],
         price: { type: String, required: true },
@@ -113,6 +113,22 @@ const ProductSchema = new Schema(
         stripePriceId: { type: String },
         platformFee: { type: Number },
         priceWithFee: { type: Number },
+
+        // Product type: digital or physical
+        productType: { type: String, enum: ['digital', 'physical'], default: 'digital' },
+
+        // Digital product fields
+        digitalFileUrl: { type: String },     // S3 URL for downloadable file
+        digitalFileName: { type: String },    // Original filename
+        digitalFileSize: { type: Number },    // File size in bytes
+
+        // Physical product fields
+        stockQuantity: { type: Number, default: 0 },
+        shippingInfo: { type: String },       // Shipping details/notes
+
+        // Common fields
+        isActive: { type: Boolean, default: true },
+        images: [{ type: String }],           // Array of image URLs
     },
     {
         timestamps: true,
@@ -128,6 +144,80 @@ const ProductSchema = new Schema(
 );
 
 export const ProductModel = mongoose.model<Entities.Product>('Product', ProductSchema as any);
+
+// Order Schema for product purchases with escrow support
+const OrderSchema = new Schema(
+    {
+        orderId: { type: String, required: true, unique: true }, // ORD-XXXXXX format
+        userId: { type: String, ref: 'User' },                   // Optional for guest checkout
+        guestEmail: { type: String },                            // Required if no userId
+        guestName: { type: String },                             // Guest name
+        creatorId: { type: String, required: true, ref: 'User' },
+        productId: { type: String, required: true, ref: 'Product' },
+
+        // Order details
+        quantity: { type: Number, default: 1 },
+        amount: { type: Number, required: true },
+        currency: { type: String, default: 'USD' },
+
+        // Status
+        status: {
+            type: String,
+            enum: ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'],
+            default: 'pending'
+        },
+
+        // Payment
+        stripePaymentIntentId: { type: String },
+        stripeCheckoutSessionId: { type: String },
+        paymentStatus: { type: String, enum: ['pending', 'succeeded', 'failed'], default: 'pending' },
+
+        // Shipping (for physical products)
+        shippingAddress: {
+            fullName: { type: String },
+            address1: { type: String },
+            address2: { type: String },
+            city: { type: String },
+            state: { type: String },
+            postalCode: { type: String },
+            country: { type: String },
+            phone: { type: String },
+        },
+        trackingNumber: { type: String },
+
+        // For digital products
+        digitalAccessGranted: { type: Boolean, default: false },
+
+        // ESCROW for physical products (money held at order level)
+        escrowStatus: { type: String, enum: ['none', 'held', 'released', 'refunded'], default: 'none' },
+        escrowAmount: { type: Number },
+        escrowReleaseAt: { type: Date },      // When escrow should be auto-released (createdAt + 48h)
+        escrowReleasedAt: { type: Date },     // When actually released to creator wallet
+
+        creatorPaidAt: { type: Date },
+        originalPrice: { type: Number },
+        priceWithFee: { type: Number },
+    },
+    {
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: function (doc, ret: any) {
+                ret.id = ret._id.toString();
+                delete ret._id;
+                delete ret.__v;
+            },
+        },
+    }
+);
+
+// Index for efficient queries
+OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ creatorId: 1, createdAt: -1 });
+OrderSchema.index({ escrowStatus: 1, escrowReleaseAt: 1 }); // For escrow release job
+OrderSchema.index({ guestEmail: 1 });
+
+export const OrderModel = mongoose.model<Entities.Order>('Order', OrderSchema as any);
 
 const EventSchema = new Schema(
     {

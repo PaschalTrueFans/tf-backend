@@ -9,7 +9,7 @@ export class SeedsController {
 
   constructor() {
     Logger.info('Seeds controller initialized...');
-    this.db = new Db();
+    this.db = Db.Instance;
   }
 
   public async initSeeds() {

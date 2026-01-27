@@ -1,12 +1,14 @@
 import * as express from 'express';
 import { UserController } from '../controller/user.controller';
-import { jwtAuth } from '../middlewares/api-auth';
+import { jwtAuth, optionalJwtAuth } from '../middlewares/api-auth';
 
 const router = express.Router();
 const userController = new UserController();
 
 // Public routes (no auth required)
 router.get('/creator/page/:pageName', userController.getCreatorByPageName);
+router.get('/creator/store/:creatorId', optionalJwtAuth, userController.getCreatorStore); // Public store page
+router.post('/orders/checkout', optionalJwtAuth, userController.createProductCheckoutSession); // Guest checkout supported
 
 // Protected routes
 router.use(jwtAuth);
@@ -59,6 +61,14 @@ router.delete('/products/:id', userController.deleteProduct);
 router.get('/creators/:creatorId/products', userController.getCreatorProducts);
 router.get('/products/:productId/purchase-status', userController.checkProductPurchase);
 
+// Order & Sales Routes
+router.get('/orders', userController.getMyOrders);
+router.get('/orders/:orderId', userController.getOrderById);
+router.put('/orders/:orderId/status', userController.updateOrderStatus); // Creator only (checked in controller)
+router.get('/sales', userController.getCreatorSales); // Creator sales
+router.get('/products/digital/purchased', userController.getPurchasedDigitalProducts);
+router.get('/products/digital/:productId/download', userController.getDigitalProductDownloadLink);
+
 // Event CRUD
 router.post('/events', userController.createEvent);
 router.get('/events', userController.getEvents);
@@ -79,7 +89,7 @@ router.get('/creators/:creatorId/subscribers', userController.getCreatorSubscrib
 
 // Stripe checkout session
 router.post('/checkout-session', userController.createCheckoutSession);
-router.post('/product-checkout-session', userController.createProductCheckoutSession);
+// router.post('/product-checkout-session', userController.createProductCheckoutSession); // MOVED TO PUBLIC /orders/checkout
 router.post('/subscriptions/:subscriptionId/cancel', userController.cancelSubscription);
 
 // Insights routes

@@ -16,7 +16,7 @@ export class CommonService {
   constructor() {
     Logger.info('CommonService initialized...');
 
-    this.db = new Db();
+    this.db = Db.Instance;
   }
 
   private getAwsS3Service(): AwsS3Service {
@@ -49,6 +49,7 @@ export class CommonService {
 
     const file = files.fileToUpload as fileUpload.UploadedFile;
 
+    const db = Db.Instance;
     const img = await this.getAwsS3Service().UploadFileToS3(file.data, file.name, path);
 
     return img;

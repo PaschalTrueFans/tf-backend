@@ -22,7 +22,8 @@ export class Db {
     Wallet: WalletDatabase;
   };
 
-  public constructor() {
+  private constructor() {
+    // Private constructor for singleton
     this.logger = Logger;
 
     // We no longer pass knex related args. 
@@ -32,12 +33,7 @@ export class Db {
 
     // For now, passing empty object or undefined as we transition
     // Ideally, we should refactor controllers to not need these args or accept different ones.
-    const dbArgs = {
-      // @ts-ignore
-      GetKnex: () => { throw new Error('Knex is removed'); },
-      // @ts-ignore
-      RunQuery: () => { throw new Error('Knex is removed'); },
-    };
+    const dbArgs = {};
 
     this.v1 = {
       User: new UserDatabase(dbArgs),

@@ -63,3 +63,38 @@ export const jwtAuth = async (
     res.status(400).json({ Error: true, Msg: `User Token Is Invalid or Expired!4` });
   }
 };
+
+export const optionalJwtAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+    let token: string = req.headers['access-token']?.toString() || '';
+
+    if (!token && req.headers['authorization']) {
+      const authHeader = req.headers['authorization'].toString();
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+
+    if (!token) {
+      return next(); // Proceed without userId
+    }
+
+    const decoded: any = JWT.verify(token, Jwt.JWT_SECRET || '');
+    if (!decoded.isRefreshToken) {
+      req.userId = decoded.id;
+    }
+    next();
+  } catch (error) {
+    // If token is invalid, we just proceed as guest rather than erroring 
+    // unless you want hard-fail on invalid token. For checkout, 
+    // it's safer to proceed as guest or let controller handle it.
+    next();
+  }
+};

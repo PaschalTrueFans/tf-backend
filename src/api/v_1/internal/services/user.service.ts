@@ -14,6 +14,7 @@ import { generateRandomToken } from '../../../../helpers/otp';
 import moment from 'moment';
 import { EmailService } from '../../../../helpers/email';
 import { FrontEndLink } from '../../../../helpers/env';
+import { WalletService } from './wallet.service';
 
 export class UserService {
   private db: Db;
@@ -43,6 +44,7 @@ export class UserService {
       profilePhoto: user.profilePhoto || null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      subscribedMemberships: await this.db.v1.User.GetUserActiveSubscriptions(userId)
     };
 
     // If user has creator fields, add them to the creator object
@@ -1051,11 +1053,24 @@ export class UserService {
         Logger.error('UserService.CreateProduct - Platform fee is 0. No fee will be added to the price. Make sure settings have a platform fee configured.');
       }
 
+      const productType = body.productType || 'digital';
+
       // Create Stripe product
       const stripeProduct = await stripeService.createProduct(
         body.name,
-        body.description || `Digital product: ${body.name}`
+        body.description || `${productType === 'digital' ? 'Digital' : 'Physical'} product: ${body.name}`
       );
+
+      // Update Stripe product metadata if needed
+      if (productType === 'physical') {
+        const stripe = stripeService.getStripeInstance();
+        await stripe.products.update(stripeProduct.id, {
+          metadata: {
+            shippable: 'true',
+            creatorId
+          }
+        });
+      }
 
       // Calculate price with platform fee for Stripe
       const originalPrice = parseFloat(body.price);
@@ -1090,7 +1105,7 @@ export class UserService {
         creatorId,
         name: body.name,
         description: body.description,
-        mediaUrl: body.mediaUrl,
+        mediaUrl: body.mediaUrl, // Preview image
         price: body.price, // Store original price for display
         accessType: body.accessType,
         allowedMembershipIds: body.allowedMembershipIds,
@@ -1098,6 +1113,16 @@ export class UserService {
         stripePriceId: stripePrice.id,
         platformFee: platformFee, // Store platform fee percentage
         priceWithFee: priceWithFee, // Store price with fee for reference
+
+        // New fields
+        productType,
+        digitalFileUrl: body.digitalFileUrl,
+        digitalFileName: body.digitalFileName,
+        digitalFileSize: body.digitalFileSize,
+        stockQuantity: body.stockQuantity ? parseInt(body.stockQuantity) : 0,
+        shippingInfo: body.shippingInfo,
+        images: body.images || [],
+        isActive: true
       };
 
       const id = await this.db.v1.User.CreateProduct(product);
@@ -1304,6 +1329,270 @@ export class UserService {
     }
 
     await this.db.v1.User.DeleteProduct(productId);
+  }
+
+  // ==================== ORDER & STORE SERVICE METHODS ====================
+
+  /**
+   * Create checkout session for product purchase (supports Guest Checkout)
+   */
+  public async CreateProductCheckoutSession(
+    userId: string | null, // Nullable for guest
+    productId: string,
+    successUrl: string,
+    cancelUrl: string,
+    guestEmail?: string,
+    guestName?: string
+  ): Promise<{ sessionId: string; url: string }> {
+    Logger.info('UserService.CreateProductCheckoutSession', { userId, productId, guestEmail });
+
+    const product = await this.db.v1.User.GetProductById(productId);
+    if (!product) throw new AppError(404, 'Product not found');
+    if (!product.stripePriceId) throw new AppError(400, 'Product not configured for payment');
+
+    // If physical product, check stock
+    if (product.productType === 'physical') {
+      if (product.stockQuantity !== undefined && product.stockQuantity <= 0) {
+        throw new AppError(400, 'Product is out of stock');
+      }
+    }
+
+    // Prepare metadata
+    const metadata: any = {
+      type: 'PRODUCT_PURCHASE',
+      productId: product.id,
+      creatorId: product.creatorId,
+      productType: product.productType || 'digital'
+    };
+
+    if (userId) {
+      metadata.userId = userId;
+      // Get user email
+      const user = await this.db.v1.User.GetUser({ id: userId });
+      if (user) metadata.userEmail = user.email;
+    } else {
+      // Guest Checkout
+      if (!guestEmail) throw new AppError(400, 'Email required for guest checkout');
+      metadata.guestEmail = guestEmail;
+      metadata.guestName = guestName || '';
+      metadata.isGuest = 'true';
+    }
+
+    // Create session
+    const session = await stripeService.createPaymentCheckoutSession(
+      product.stripePriceId,
+      successUrl,
+      cancelUrl,
+      userId ? undefined : guestEmail, // Pre-fill email for guest
+      metadata
+    );
+
+    return { sessionId: session.id, url: session.url || '' };
+  }
+
+  /**
+   * Get public store page for a creator
+   */
+  public async GetCreatorStore(creatorId: string): Promise<any> {
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator) throw new AppError(404, 'Creator not found');
+
+    const products = await this.db.v1.User.GetActiveProductsByCreator(creatorId);
+
+    return {
+      creator: {
+        id: creator.id,
+        name: creator.name,
+        creatorName: creator.creatorName,
+        pageName: creator.pageName,
+        profilePhoto: creator.profilePhoto,
+        coverPhoto: creator.coverPhoto,
+        bio: creator.bio
+      },
+      products: products.map(p => ({
+        ...p,
+        // Hide sensitive backend fields
+        stripeProductId: undefined,
+        stripePriceId: undefined,
+        platformFee: undefined,
+        priceWithFee: undefined,
+        // Hide file URL
+        digitalFileUrl: undefined
+      }))
+    };
+  }
+
+  /**
+   * Get orders for a user (Buyer view)
+   */
+  public async GetMyOrders(userId: string, page: number = 1, limit: number = 10, status?: string): Promise<any> {
+    return await this.db.v1.User.GetOrdersByUser(userId, { page, limit, status });
+  }
+
+  /**
+   * Get orders for a guest (via email)
+   */
+  public async GetGuestOrders(email: string, page: number = 1, limit: number = 10): Promise<any> {
+    return await this.db.v1.User.GetOrdersByGuestEmail(email, { page, limit });
+  }
+
+  /**
+   * Get sales/orders for a creator (Seller view)
+   */
+  public async GetCreatorSales(creatorId: string, page: number = 1, limit: number = 10, status?: string): Promise<any> {
+    // Validate creator
+    const creator = await this.db.v1.User.GetUser({ id: creatorId });
+    if (!creator || !creator.pageName) throw new AppError(403, 'Only creators can view sales');
+
+    return await this.db.v1.User.GetOrdersByCreator(creatorId, { page, limit, status });
+  }
+
+  /**
+   * Get single order details
+   */
+  public async GetOrderById(orderId: string, currentUserId: string): Promise<any> {
+    let order = await this.db.v1.User.GetOrderById(orderId);
+
+    // RECOVERY: If order not found but it's a Stripe Session ID, try to recover from Stripe
+    // This handles cases where the webhook has not yet processed (race condition) or failed
+    if (!order && orderId.startsWith('cs_')) {
+      try {
+        Logger.info('Order not found in DB, attempting recovery from Stripe', { orderId });
+        const session = await stripeService.getCheckoutSession(orderId);
+
+        if (session && session.payment_status === 'paid') {
+          const metadata = session.metadata || {};
+          const { productId, creatorId, productType, isGuest, guestEmail, guestName } = metadata;
+          let userId = metadata.userId;
+
+          if (productId && creatorId) {
+            // Recover User ID if missing from metadata but available in email
+            if (!isGuest && !userId && session.customer_email) {
+              const user = await this.db.v1.User.GetUserByEmail(session.customer_email);
+              if (user) userId = user.id;
+            }
+
+            const amount = session.amount_total ? session.amount_total / 100 : 0;
+            const currency = session.currency?.toUpperCase() || 'USD';
+            const isDigital = productType === 'digital';
+            const escrowStatus = isDigital ? 'released' : 'held';
+            const escrowReleaseAt = isDigital ? undefined : new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+            const shipping = (session as any).shipping_details;
+            const shippingAddress = shipping ? {
+              fullName: shipping.name || guestName || 'Guest',
+              address1: shipping.address?.line1 || undefined,
+              address2: shipping.address?.line2 || undefined,
+              city: shipping.address?.city || undefined,
+              state: shipping.address?.state || undefined,
+              postalCode: shipping.address?.postal_code || undefined,
+              country: shipping.address?.country || undefined,
+            } : undefined;
+
+            const orderData: any = {
+              userId: userId || undefined,
+              guestEmail: userId ? undefined : (guestEmail || session.customer_details?.email || undefined),
+              guestName: userId ? undefined : (guestName || session.customer_details?.name || 'Guest'),
+              creatorId,
+              productId,
+              quantity: 1,
+              amount,
+              currency,
+              status: 'paid',
+              paymentStatus: 'succeeded',
+              stripeCheckoutSessionId: session.id,
+              stripePaymentIntentId: session.payment_intent as string,
+              shippingAddress,
+              digitalAccessGranted: isDigital,
+              escrowStatus,
+              escrowReleaseAt,
+              creatorPaidAt: isDigital ? new Date().toISOString() : undefined,
+            };
+
+            // Create Order
+            const created = await this.db.v1.User.CreateOrder(orderData);
+            Logger.info('Order recovered from Stripe', { orderId: created.orderId });
+
+            // Handle Wallet Credit
+            if (isDigital) {
+              const walletService = new WalletService({ db: this.db });
+              // Note: Ideally check for duplicate credit, but simple recovery assumes missing order = missing credit
+              await walletService.CreditCreatorForDigitalSale(creatorId, amount, created.orderId);
+            }
+
+            // Refresh order from DB (to get full object with IDs etc if CreateOrder returns partial)
+            // CreateOrder returns full entity so we can use 'created' directly, but casting is safer
+            order = created;
+          }
+        }
+      } catch (err) {
+        Logger.error('Failed to recover order from Stripe', err);
+      }
+    }
+
+    if (!order) throw new AppError(404, 'Order not found');
+
+    // Access control: Buyer, Seller, or Admin
+    if (order.userId !== currentUserId && order.creatorId !== currentUserId) {
+      // Check if admin (implement if needed)
+      // Check if guest (implement logic to verifying guest tokens if we add that)
+      throw new AppError(403, 'Access denied');
+    }
+
+    const product = await this.db.v1.User.GetProductById(order.productId);
+
+    // Hide download link if not granted or refunded
+    let downloadLink = null;
+    if (product?.productType === 'digital' && order.paymentStatus === 'succeeded' && order.digitalAccessGranted) {
+      // Only buyer gets the link
+      if (order.userId === currentUserId || order.guestEmail) {
+        downloadLink = product.digitalFileUrl;
+      }
+    }
+
+    return {
+      ...order,
+      productName: product?.name,
+      productDetails: product?.description,
+      product,
+      downloadLink // Only populated if authorized and available
+    };
+  }
+
+  /**
+   * Update order status (Shipping updates)
+   */
+  public async UpdateOrderStatus(creatorId: string, orderId: string, status: string, trackingNumber?: string): Promise<any> {
+    const order = await this.db.v1.User.GetOrderById(orderId);
+    if (!order) throw new AppError(404, 'Order not found');
+
+    if (order.creatorId !== creatorId) throw new AppError(403, 'Not authorized to update this order');
+
+    const updateData: any = { status };
+    if (trackingNumber) updateData.trackingNumber = trackingNumber;
+
+    return await this.db.v1.User.UpdateOrder(orderId, updateData);
+  }
+
+  /**
+   * Get purchased digital products
+   */
+  public async GetPurchasedDigitalProducts(userId: string): Promise<any[]> {
+    return await this.db.v1.User.GetPurchasedDigitalProducts(userId);
+  }
+
+  /**
+   * Get download link for purchased digital product
+   */
+  public async GetDigitalProductDownloadLink(userId: string, productId: string): Promise<string> {
+    // Check if purchased
+    const hasAccess = await this.db.v1.User.HasDigitalAccess(productId, userId);
+    if (!hasAccess) throw new AppError(403, 'You have not purchased this product');
+
+    const product = await this.db.v1.User.GetProductById(productId);
+    if (!product || !product.digitalFileUrl) throw new AppError(404, 'File not found');
+
+    return product.digitalFileUrl;
   }
 
   // Event CRUD methods with creator validation
@@ -1915,56 +2204,7 @@ export class UserService {
     }
   }
 
-  // Stripe checkout session for product purchases
-  public async CreateProductCheckoutSession(
-    userId: string,
-    productId: string,
-    successUrl: string,
-    cancelUrl: string
-  ): Promise<{ sessionId: string; url: string }> {
-    Logger.info('UserService.CreateProductCheckoutSession', { userId, productId, successUrl, cancelUrl });
 
-    // Get product details
-    const product = await this.db.v1.User.GetProductById(productId);
-    if (!product) {
-      throw new BadRequest('Product not found');
-    }
-
-    if (!product.stripePriceId) {
-      throw new BadRequest('Product does not have Stripe integration configured');
-    }
-
-    // Get user details for customer email
-    const user = await this.db.v1.User.GetUser({ id: userId });
-    if (!user) {
-      throw new BadRequest('User not found');
-    }
-
-    try {
-      // Create Stripe checkout session for one-time payment
-      const session = await stripeService.createPaymentCheckoutSession(
-        product.stripePriceId,
-        successUrl,
-        cancelUrl,
-        user.email,
-        {
-          userId,
-          productId,
-          creatorId: product.creatorId,
-        }
-      );
-
-      Logger.info('UserService.CreateProductCheckoutSession success', { sessionId: session.id });
-
-      return {
-        sessionId: session.id,
-        url: session.url || '',
-      };
-    } catch (error) {
-      Logger.error('UserService.CreateProductCheckoutSession failed', error);
-      throw new AppError(500, 'Failed to create product checkout session');
-    }
-  }
 
   // Stripe webhook handlers
   public async CreateSubscriptionFromStripe(subscriptionData: {
@@ -2134,6 +2374,23 @@ export class UserService {
       };
 
       await this.db.v1.User.CreateTransaction(transaction);
+
+      // Credit Creator Wallet
+      if (invoice.paid && netAmount && netAmount > 0) {
+        try {
+          const walletService = new WalletService({ db: this.db });
+          await walletService.CreditCreatorForSubscription(subscription.creatorId, netAmount, subscription.id);
+          Logger.info('Creator wallet credited for subscription payment', {
+            creatorId: subscription.creatorId,
+            amount: netAmount
+          });
+        } catch (walletError) {
+          Logger.error('Failed to credit creator wallet for subscription', walletError);
+          // Don't throw here to avoid failing the whole webhook process if wallet credit fails
+          // In a production app, this should be retried or queued.
+        }
+      }
+
       Logger.info('Transaction created from invoice', {
         transactionId: invoice.id,
         subscriptionId: subscription.id

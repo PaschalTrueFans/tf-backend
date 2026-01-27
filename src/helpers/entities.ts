@@ -139,13 +139,75 @@ export interface Product extends DefaultTable {
   creatorId: string;
   name: string;
   description?: string;
-  mediaUrl?: string; // For digital products
+  mediaUrl?: string; // Preview image/thumbnail
   accessType?: 'free' | 'premium';
   allowedMembershipIds?: string[];
   price: string;
   stripeProductId?: string;
   stripePriceId?: string;
   platformFee?: number;
+  priceWithFee?: number;
+
+  // Product type
+  productType?: 'digital' | 'physical';
+
+  // Digital product fields
+  digitalFileUrl?: string;
+  digitalFileName?: string;
+  digitalFileSize?: number;
+
+  // Physical product fields
+  stockQuantity?: number;
+  shippingInfo?: string;
+
+  // Common fields
+  isActive?: boolean;
+  images?: string[];
+}
+
+export interface ShippingAddress {
+  fullName?: string;
+  address1?: string;
+  address2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  phone?: string;
+}
+
+export interface Order extends DefaultTable {
+  orderId: string;
+  userId?: string;           // Optional for guest checkout
+  guestEmail?: string;
+  guestName?: string;
+  creatorId: string;
+  productId: string;
+
+  quantity: number;
+  amount: number;
+  currency: string;
+
+  status: 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+
+  stripePaymentIntentId?: string;
+  stripeCheckoutSessionId?: string;
+  paymentStatus: 'pending' | 'succeeded' | 'failed';
+
+  shippingAddress?: ShippingAddress;
+  trackingNumber?: string;
+
+  digitalAccessGranted?: boolean;
+
+  escrowStatus: 'none' | 'held' | 'released' | 'refunded';
+  escrowAmount?: number;
+  escrowReleaseAt?: string;
+  escrowReleasedAt?: string;
+
+  creatorPaidAt?: string;
+  productName?: string;
+  productDetails?: string;
+  originalPrice?: number;
   priceWithFee?: number;
 }
 
@@ -295,7 +357,7 @@ export interface Wallet extends DefaultTable {
   };
 }
 
-export type TransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'PURCHASE_COINS' | 'GIFT_SEND' | 'GIFT_RECEIVE';
+export type TransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'PURCHASE_COINS' | 'GIFT_SEND' | 'GIFT_RECEIVE' | 'PRODUCT_SALE';
 export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
 
 export interface WalletTransaction extends DefaultTable {
@@ -304,6 +366,7 @@ export interface WalletTransaction extends DefaultTable {
   amount: number;
   currency: 'USD' | 'COIN';
   relatedUserId?: string;
+  orderId?: string;          // Link to order for product sales
   status: TransactionStatus;
   metadata?: any;
 }

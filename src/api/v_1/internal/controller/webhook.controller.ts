@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { Logger } from '../../../../helpers/logger';
-import { stripeService } from '../../../../helpers';
+import { stripeService, Entities } from '../../../../helpers';
 import { UserService } from '../services/user.service';
 import { WalletService } from '../services/wallet.service';
 import { Db } from '../../../../database/db';
@@ -81,130 +81,146 @@ export class WebhookController {
 
     try {
       const metadata = session.metadata || {};
-      const userId = metadata.userId;
-      const creatorId = metadata.creatorId;
       const type = metadata.type;
 
-      if (!userId) {
-        Logger.error('Missing userId in checkout session', { sessionId: session.id });
-        return;
-      }
+      // Initialize WalletService
+      // Accessing db from userService which we know is there but might be private. 
+      // Safe hack: cast to any or pass db explicitly if we modify signature.
+      // Better: WebhookController creates the services properly.
+      const db = (userService as any).db as Db;
+      const walletService = new WalletService({ db });
 
+      // Handle Coin Purchase
       if (type === 'PURCHASE_COINS') {
+        const userId = metadata.userId;
         const { coinAmount, usdCost } = metadata;
-        if (!coinAmount || !usdCost) {
-          Logger.error('Missing coinAmount or usdCost in PURCHASE_COINS session', { sessionId: session.id });
+        if (!userId || !coinAmount || !usdCost) {
+          Logger.error('Missing data in PURCHASE_COINS session', { sessionId: session.id });
           return;
         }
-
-        const walletService = new WalletService({ db: userService['db'] }); // Accessing db from userService for now or pass it
         await walletService.CreditWalletAfterPurchase(userId, parseInt(coinAmount), parseFloat(usdCost), session.id);
-
         Logger.info('Wallet credited after coin purchase', { userId, coinAmount });
         return;
       }
 
-      if (!creatorId && session.mode !== 'payment') {
-        // userId is enough for simple payments like buy coins, but for subs we need creatorId
-        Logger.error('Missing creatorId in checkout session', { sessionId: session.id });
-        return;
-      }
+      // Handle Product Purchase (New Order Flow)
+      if (type === 'PRODUCT_PURCHASE' || session.mode === 'payment') {
+        const { productId, creatorId, productType, isGuest, guestEmail, guestName } = metadata;
+        let userId = metadata.userId;
 
-      // Check if this is a product purchase (mode: 'payment') or subscription (mode: 'subscription')
-      if (session.mode === 'payment') {
-        // Handle product purchase
-        const { productId } = metadata;
-
-        if (!productId) {
-          Logger.error('Missing productId in checkout session metadata', { sessionId: session.id });
+        if (!productId || !creatorId) {
+          Logger.error('Missing data in product purchase session', { sessionId: session.id });
           return;
         }
 
-        if (!creatorId) {
-          Logger.error('Missing creatorId in product purchase session', { sessionId: session.id });
-          return;
-        }
-
-        // Get payment intent details
-        const paymentIntentId = session.payment_intent as string;
-        let paymentIntent = null;
-        let chargeId = null;
-        let customerId = session.customer as string || null;
-
-        if (paymentIntentId) {
-          try {
-            const stripe = stripeService.getStripeInstance();
-            paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-            chargeId = typeof paymentIntent.latest_charge === 'string'
-              ? paymentIntent.latest_charge
-              : paymentIntent.latest_charge?.id || null;
-            customerId = customerId || (typeof paymentIntent.customer === 'string'
-              ? paymentIntent.customer
-              : paymentIntent.customer?.id || null);
-          } catch (error) {
-            Logger.error('Error retrieving payment intent', error);
+        // Validate User for non-guest
+        if (!isGuest && !userId) {
+          // Fallback: try to find user by email
+          if (session.customer_email) {
+            const user = await db.v1.User.GetUserByEmail(session.customer_email);
+            if (user) userId = user.id;
+          }
+          if (!userId) {
+            Logger.error('Missing userId in non-guest checkout session', { sessionId: session.id });
+            return;
           }
         }
 
-        // Get amount from session
+        // Get Payment Details
+        const paymentIntentId = session.payment_intent as string;
         const amount = session.amount_total ? session.amount_total / 100 : 0;
-        const currency = session.currency?.toUpperCase() || 'NGN';
+        const currency = session.currency?.toUpperCase() || 'USD';
 
-        // Create product purchase record
-        await userService.CreateProductPurchaseFromStripe({
-          userId,
-          productId,
+        // Shipping Info
+        // Cast session to any because shipping_details might be missing in older Stripe types
+        const shipping = (session as any).shipping_details;
+        const shippingAddress = shipping ? {
+          fullName: shipping.name || guestName || 'Guest',
+          address1: shipping.address?.line1 || undefined,
+          address2: shipping.address?.line2 || undefined,
+          city: shipping.address?.city || undefined,
+          state: shipping.address?.state || undefined,
+          postalCode: shipping.address?.postal_code || undefined,
+          country: shipping.address?.country || undefined,
+        } : undefined;
+
+        // Determine Escrow Logic
+        const isDigital = productType === 'digital';
+        // Escrow logic: Digital = 'released' (immediate), Physical = 'held' (48h)
+        const escrowStatus = isDigital ? 'released' : 'held';
+        const escrowReleaseAt = isDigital ? undefined : new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h from now
+
+        // Get Product Details for Fee Logic
+        const product = await db.v1.User.GetProductById(productId);
+        const originalPrice = product ? parseFloat(product.price) : amount;
+        const priceWithFee = product ? (product.priceWithFee || originalPrice) : amount;
+
+        // Create Order
+        const orderData: Partial<Entities.Order> = {
+          userId: userId || undefined,
+          guestEmail: userId ? undefined : (guestEmail || session.customer_details?.email || undefined),
+          guestName: userId ? undefined : (guestName || session.customer_details?.name || 'Guest'),
           creatorId,
+          productId,
+          quantity: 1, // Default to 1 for now
+          amount,
+          currency,
+          originalPrice,
+          priceWithFee,
+          status: 'paid', // Payment successful
+          paymentStatus: 'succeeded',
           stripeCheckoutSessionId: session.id,
-          stripePaymentIntentId: paymentIntentId || undefined,
-          stripeChargeId: chargeId || undefined,
-          stripeCustomerId: customerId || undefined,
-          amount,
-          currency,
-          status: session.payment_status === 'paid' ? 'completed' : 'pending',
-        });
+          stripePaymentIntentId: paymentIntentId,
+          shippingAddress,
+          digitalAccessGranted: isDigital, // Grant access immediately for digital
+          escrowStatus,
+          escrowReleaseAt,
+          creatorPaidAt: isDigital ? new Date().toISOString() : undefined, // Paid immediately only if digital
+        };
 
-        // Create transaction record
-        await userService.CreateTransactionFromProductPurchase({
-          userId,
-          productId,
-          creatorId,
-          stripePaymentIntentId: paymentIntentId || undefined,
-          stripeChargeId: chargeId || undefined,
-          stripeCustomerId: customerId || undefined,
-          amount,
-          currency,
-          status: session.payment_status === 'paid' ? 'succeeded' : 'pending',
-        });
+        const order = await db.v1.User.CreateOrder(orderData);
+        Logger.info('Order created successfully', { orderId: order.orderId, isDigital, escrowStatus });
 
-        Logger.info('Product purchase created successfully', {
-          userId,
-          creatorId,
-          productId,
-          sessionId: session.id
-        });
-      } else if (session.mode === 'subscription') {
-        // Handle subscription (existing logic)
+        // Handle Wallet Credit
+        const creditAmount = originalPrice; // Creator gets the base price
+        if (isDigital) {
+          // Credit Creator Immediately
+          await walletService.CreditCreatorForDigitalSale(creatorId, creditAmount, order.orderId);
+          Logger.info('Creator credited for digital sale', { creatorId, amount: creditAmount });
+        } else {
+          // Physical: Funds held in escrow (tracked on Order)
+          // Set escrow amount to the original price for later release
+          orderData.escrowAmount = creditAmount;
+          await db.v1.User.UpdateOrder(order.orderId, { escrowAmount: creditAmount });
+          Logger.info('Funds held in escrow for physical sale', { creatorId, amount: creditAmount, releaseAt: escrowReleaseAt });
+        }
+
+        // Notify Users (Optional - TODO)
+        // await userService.SendOrderConfirmation(order);
+        // await userService.SendNewOrderNotification(creatorId, order);
+
+        return;
+      }
+
+      // Handle Subscription (Existing Logic)
+      if (session.mode === 'subscription') {
         const { membershipId } = session.metadata || {};
+        const userId = session.metadata?.userId;
+        const creatorId = session.metadata?.creatorId;
 
         if (!membershipId) {
           Logger.error('Missing membershipId in checkout session', { sessionId: session.id });
           return;
         }
 
-        // Get the subscription from Stripe
         const subscriptionId = session.subscription as string;
-        if (!subscriptionId) {
-          Logger.error('No subscription ID in checkout session', { sessionId: session.id });
-          return;
-        }
+        if (!subscriptionId) return;
 
         const stripeSubscription = await stripeService.getSubscription(subscriptionId);
 
-        // Create subscription in our database
         await userService.CreateSubscriptionFromStripe({
-          subscriberId: userId,
-          creatorId,
+          subscriberId: userId as string,
+          creatorId: creatorId as string,
           membershipId,
           stripeSubscriptionId: subscriptionId,
           stripeCustomerId: stripeSubscription.customer as string,
@@ -212,12 +228,7 @@ export class WebhookController {
           startedAt: new Date(stripeSubscription.created * 1000),
         });
 
-        Logger.info('Subscription created successfully', {
-          userId,
-          creatorId,
-          membershipId,
-          subscriptionId
-        });
+        Logger.info('Subscription created successfully', { userId, creatorId, membershipId });
       }
     } catch (error) {
       Logger.error('Error handling checkout.session.completed', error);

@@ -6,7 +6,7 @@ import { Logger } from '../../../helpers/logger';
 import { DatabaseErrors } from '../../../helpers/contants';
 import { UserModel } from '../../models/User';
 import { PostModel, CommentModel, LikeModel } from '../../models/Post';
-import { CategoryModel, FollowerModel, MembershipModel, SubscriptionModel, ProductModel, EventModel, ProductPurchaseModel, TransactionModel, GroupInviteModel, VerificationTokenModel, NotificationModel } from '../../models/Other';
+import { CategoryModel, FollowerModel, MembershipModel, SubscriptionModel, ProductModel, EventModel, ProductPurchaseModel, TransactionModel, GroupInviteModel, VerificationTokenModel, NotificationModel, OrderModel } from '../../models/Other';
 import { WalletModel } from '../../models/Wallet';
 import { WalletTransactionModel } from '../../models/WalletTransaction';
 
@@ -493,7 +493,7 @@ export class UserDatabase {
       const isSubscribed = await SubscriptionModel.exists({
         membershipId: m._id,
         subscriberId: currentUserId,
-        status: 'active'
+        subscriptionStatus: 'active'
       });
       return {
         ...m,
@@ -514,7 +514,7 @@ export class UserDatabase {
     const subscription = await SubscriptionModel.findOne({
       subscriberId: memberId,
       creatorId: creatorId,
-      status: 'active'
+      subscriptionStatus: 'active'
     });
     return subscription ? subscription.toJSON() : null;
   }
@@ -579,7 +579,7 @@ export class UserDatabase {
   }
 
   async GetSubscriptionsByCreatorId(creatorId: string): Promise<Entities.Subscription[]> {
-    const subs = await SubscriptionModel.find({ creatorId, status: 'active' });
+    const subs = await SubscriptionModel.find({ creatorId, subscriptionStatus: 'active' });
     return subs as unknown as Entities.Subscription[];
   }
 
@@ -614,7 +614,7 @@ export class UserDatabase {
 
   // Subscriptions
   async GetSubscriptionByUserAndCreator(userId: string, creatorId: string): Promise<Entities.Subscription | null> {
-    const sub = await SubscriptionModel.findOne({ subscriberId: userId, creatorId: creatorId, status: 'active' });
+    const sub = await SubscriptionModel.findOne({ subscriberId: userId, creatorId: creatorId, subscriptionStatus: 'active' });
     return sub ? (sub.toJSON() as Entities.Subscription) : null;
   }
 
@@ -984,7 +984,7 @@ export class UserDatabase {
     return p ? (p.toJSON() as Entities.ProductPurchase) : null;
   }
   async GetAllPaidPostsByMembershipCreators(userId: string, page: number = 1, limit: number = 10): Promise<any[]> {
-    const subs = await SubscriptionModel.find({ subscriberId: userId, status: 'active' }).select('creatorId membershipId');
+    const subs = await SubscriptionModel.find({ subscriberId: userId, subscriptionStatus: 'active' }).select('creatorId membershipId');
     const membershipIds = (subs as any[]).map(s => s.membershipId);
     const creatorIds = (subs as any[]).map(s => s.creatorId);
 
@@ -1086,5 +1086,254 @@ export class UserDatabase {
   async AddComment(postId: string, userId: string, content: string, parentCommentId?: string): Promise<string> {
     const comment = await CommentModel.create({ postId, userId, content, parentCommentId });
     return comment.id;
+  }
+
+  // ==================== ORDER MANAGEMENT ====================
+
+  // Generate unique order ID
+  private generateOrderId(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = 'ORD-';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  async CreateOrder(order: Partial<Entities.Order>): Promise<Entities.Order> {
+    const orderId = this.generateOrderId();
+    const newOrder = await OrderModel.create({ ...order, orderId });
+    return newOrder.toJSON() as Entities.Order;
+  }
+
+  async GetOrderById(orderId: string): Promise<Entities.Order | null> {
+    // 1. Try by internal orderId first (ORD-XXXXX format)
+    let order = await OrderModel.findOne({ orderId });
+    if (order) return order.toJSON() as Entities.Order;
+
+    // 2. Try by Stripe Checkout Session ID (Common for frontend polling)
+    order = await OrderModel.findOne({ stripeCheckoutSessionId: orderId });
+    if (order) return order.toJSON() as Entities.Order;
+
+    // 3. Try by MongoDB _id (Only if valid to avoid CastError)
+    if (mongoose.Types.ObjectId.isValid(orderId)) {
+      order = await OrderModel.findById(orderId);
+    }
+
+    return order ? (order.toJSON() as Entities.Order) : null;
+  }
+
+  async GetOrderByStripeSession(stripeCheckoutSessionId: string): Promise<Entities.Order | null> {
+    const order = await OrderModel.findOne({ stripeCheckoutSessionId });
+    return order ? (order.toJSON() as Entities.Order) : null;
+  }
+
+  async UpdateOrder(orderId: string, updateData: Partial<Entities.Order>): Promise<Entities.Order | null> {
+    // Try by orderId first, then by _id
+    let order = await OrderModel.findOneAndUpdate({ orderId }, updateData, { new: true });
+    if (!order) {
+      order = await OrderModel.findByIdAndUpdate(orderId, updateData, { new: true });
+    }
+    return order ? (order.toJSON() as Entities.Order) : null;
+  }
+
+  async GetOrdersByUser(userId: string, params: { page?: number; limit?: number; status?: string }): Promise<{ orders: any[]; total: number }> {
+    const { page = 1, limit = 10, status } = params;
+    const query: any = { userId };
+    if (status) query.status = status;
+
+    const ordersPromise = OrderModel.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+    const totalPromise = OrderModel.countDocuments(query);
+
+    const orders = await ordersPromise;
+    const total = await totalPromise;
+
+    // Enrich with product details
+    const enriched = await Promise.all(orders.map(async (o: any) => {
+      const product = await ProductModel.findById(o.productId).lean();
+      const creator = await UserModel.findById(o.creatorId).select('name creatorName profilePhoto pageName').lean();
+      return {
+        ...o,
+        id: o._id.toString(),
+        productName: product?.name,
+        productDetails: product?.description,
+        product: product ? { ...product, id: (product as any)._id.toString() } : null,
+        creator: creator ? { ...creator, id: (creator as any)._id.toString() } : null,
+      };
+    }));
+
+    return { orders: enriched, total };
+  }
+
+  async GetOrdersByGuestEmail(email: string, params: { page?: number; limit?: number }): Promise<{ orders: any[]; total: number }> {
+    const { page = 1, limit = 10 } = params;
+    const query = { guestEmail: email };
+
+    const ordersPromise = OrderModel.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+    const totalPromise = OrderModel.countDocuments(query);
+
+    const orders = await ordersPromise;
+    const total = await totalPromise;
+
+    const enriched = await Promise.all(orders.map(async (o: any) => {
+      const product = await ProductModel.findById(o.productId).lean();
+      return {
+        ...o,
+        id: o._id.toString(),
+        productName: product?.name,
+        productDetails: product?.description,
+        product: product ? { ...product, id: (product as any)._id.toString() } : null,
+      };
+    }));
+
+    return { orders: enriched, total };
+  }
+
+  async GetOrdersByCreator(creatorId: string, params: { page?: number; limit?: number; status?: string }): Promise<{ orders: any[]; total: number }> {
+    const { page = 1, limit = 10, status } = params;
+    const query: any = { creatorId };
+    if (status) query.status = status;
+
+    const ordersPromise = OrderModel.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+    const totalPromise = OrderModel.countDocuments(query);
+
+    const orders = await ordersPromise;
+    const total = await totalPromise;
+
+    const enriched = await Promise.all(orders.map(async (o: any) => {
+      const product = await ProductModel.findById(o.productId).lean();
+      const buyer = o.userId
+        ? await UserModel.findById(o.userId).select('name email profilePhoto').lean()
+        : null;
+      return {
+        ...o,
+        id: o._id.toString(),
+        productName: product?.name,
+        productDetails: product?.description,
+        product: product ? { ...product, id: (product as any)._id.toString() } : null,
+        buyer: buyer ? { ...buyer, id: (buyer as any)._id.toString() } : { name: o.guestName, email: o.guestEmail },
+      };
+    }));
+
+    return { orders: enriched, total };
+  }
+
+  // Escrow Management
+  async GetOrdersWithPendingEscrow(): Promise<Entities.Order[]> {
+    const now = new Date();
+    const orders = await OrderModel.find({
+      escrowStatus: 'held',
+      escrowReleaseAt: { $lte: now }
+    });
+    return orders.map(o => o.toJSON() as Entities.Order);
+  }
+
+  async ReleaseOrderEscrow(orderId: string): Promise<Entities.Order | null> {
+    const order = await OrderModel.findOneAndUpdate(
+      { orderId, escrowStatus: 'held' },
+      {
+        escrowStatus: 'released',
+        escrowReleasedAt: new Date(),
+        creatorPaidAt: new Date()
+      },
+      { new: true }
+    );
+    return order ? (order.toJSON() as Entities.Order) : null;
+  }
+
+  async GetCreatorEscrowTotal(creatorId: string): Promise<number> {
+    const result = await OrderModel.aggregate([
+      { $match: { creatorId, escrowStatus: 'held' } },
+      { $group: { _id: null, total: { $sum: '$escrowAmount' } } }
+    ]);
+    return result[0]?.total || 0;
+  }
+
+  // Get products for a creator's store (public, active products only)
+  async GetActiveProductsByCreator(creatorId: string): Promise<Entities.Product[]> {
+    const products = await ProductModel.find({
+      creatorId,
+      isActive: true
+    }).sort({ createdAt: -1 });
+    return products as unknown as Entities.Product[];
+  }
+
+  // Check if user/guest has digital access to a product
+  async HasDigitalAccess(productId: string, userId?: string, guestEmail?: string): Promise<boolean> {
+    const query: any = {
+      productId,
+      paymentStatus: 'succeeded',
+      digitalAccessGranted: true
+    };
+
+    if (userId) {
+      query.userId = userId;
+    } else if (guestEmail) {
+      query.guestEmail = guestEmail;
+    } else {
+      return false;
+    }
+
+    const order = await OrderModel.findOne(query);
+    return !!order;
+  }
+
+  // Get user's purchased digital products
+  async GetPurchasedDigitalProducts(userId: string): Promise<any[]> {
+    const orders = await OrderModel.find({
+      userId,
+      paymentStatus: 'succeeded',
+      digitalAccessGranted: true
+    }).lean();
+
+    const products = await Promise.all(orders.map(async (o: any) => {
+      const product = await ProductModel.findById(o.productId).lean();
+      if (!product || (product as any).productType !== 'digital') return null;
+      return {
+        ...product,
+        id: (product as any)._id.toString(),
+        orderId: o.orderId,
+        purchasedAt: o.createdAt
+      };
+    }));
+
+    return products.filter(p => p !== null);
+  }
+  // Get all active subscriptions for a user with creator and tier details
+  async GetUserActiveSubscriptions(userId: string): Promise<any[]> {
+    const subs = await SubscriptionModel.find({ subscriberId: userId, subscriptionStatus: 'active' }).lean();
+
+    return Promise.all((subs as any[]).map(async (s) => {
+      const creator = await UserModel.findById(s.creatorId).select('name creatorName profilePhoto pageName').lean();
+      const membership = await MembershipModel.findById(s.membershipId).select('name price tier').lean();
+
+      return {
+        id: s._id.toString(),
+        creatorId: s.creatorId,
+        creator: creator ? {
+          name: (creator as any).name,
+          creatorName: (creator as any).creatorName,
+          pageName: (creator as any).pageName,
+          profilePhoto: (creator as any).profilePhoto
+        } : null,
+        membershipId: s.membershipId,
+        membershipName: membership?.name,
+        tier: membership?.tier || 1,
+        startedAt: s.startedAt,
+        subscriptionStatus: s.subscriptionStatus
+      };
+    }));
   }
 }

@@ -61,7 +61,7 @@ export function createSocketServer(httpServer: HttpServer, corsOrigin: string | 
       transport: socket.conn.transport.name,
       userAgent: socket.handshake.headers['user-agent']
     });
-    const db = new Db();
+    const db = Db.Instance;
 
     // Join user's personal room for global updates
     socket.join(`user:${socket.data.userId}`);

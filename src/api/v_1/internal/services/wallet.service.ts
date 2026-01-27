@@ -104,6 +104,67 @@ export class WalletService {
         });
     }
 
+    public async CreditCreatorForDigitalSale(creatorId: string, amount: number, orderId: string): Promise<void> {
+        const wallet = await this.db.v1.Wallet.GetWallet(creatorId);
+        if (!wallet) throw new AppError(404, 'Creator wallet not found');
+
+        // Credit USD balance immediately
+        await this.db.v1.Wallet.IncrementBalance(creatorId, { usd: amount });
+
+        // Record transaction
+        await this.db.v1.Wallet.CreateTransaction({
+            walletId: wallet.id,
+            type: 'PRODUCT_SALE',
+            amount: amount,
+            currency: 'USD',
+            status: 'COMPLETED',
+            orderId: orderId,
+            metadata: { description: 'Digital product sale' }
+        });
+    }
+
+    public async ReleaseOrderEscrow(creatorId: string, amount: number, orderId: string): Promise<void> {
+        const wallet = await this.db.v1.Wallet.GetWallet(creatorId);
+        if (!wallet) throw new AppError(404, 'Creator wallet not found');
+
+        // Credit USD balance after escrow release
+        await this.db.v1.Wallet.IncrementBalance(creatorId, { usd: amount });
+
+        // Record transaction
+        await this.db.v1.Wallet.CreateTransaction({
+            walletId: wallet.id,
+            type: 'PRODUCT_SALE',
+            amount: amount,
+            currency: 'USD',
+            status: 'COMPLETED',
+            orderId: orderId,
+            metadata: { description: 'Physical product sale escrow release' }
+        });
+
+        Logger.info('Escrow released to wallet', { creatorId, amount, orderId });
+    }
+    public async CreditCreatorForSubscription(creatorId: string, amount: number, subscriptionId: string): Promise<void> {
+        const wallet = await this.db.v1.Wallet.GetWallet(creatorId);
+        if (!wallet) throw new AppError(404, 'Creator wallet not found');
+
+        // Credit USD balance immediately for subscription payment
+        // In a real app, you might want to adjust for platform fees here if amount is gross.
+        // Assuming 'amount' passed is netAmount.
+        await this.db.v1.Wallet.IncrementBalance(creatorId, { usd: amount });
+
+        // Record transaction
+        await this.db.v1.Wallet.CreateTransaction({
+            walletId: wallet.id,
+            type: 'PRODUCT_SALE', // Using PRODUCT_SALE as a generic for revenue, or could add SUBSCRIPTION_SALE
+            amount: amount,
+            currency: 'USD',
+            status: 'COMPLETED',
+            metadata: { description: 'Subscription payment', subscriptionId }
+        });
+
+        Logger.info('Creator credited for subscription payment', { creatorId, amount, subscriptionId });
+    }
+
 
 
     public async SendGift(senderId: string, recipientId: string, coinAmount: number): Promise<void> {
