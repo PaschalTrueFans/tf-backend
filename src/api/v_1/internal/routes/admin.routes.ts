@@ -25,5 +25,11 @@ router.post('/email-broadcasts', adminController.createEmailBroadcast);
 router.get('/settings', adminController.getSettings);
 router.put('/settings', adminController.updateSettings);
 
+// Payout management
+router.get('/payouts', adminController.getPayouts);
+router.put('/payouts/:payoutId/approve', adminController.approvePayout);
+router.put('/payouts/:payoutId/reject', adminController.rejectPayout);
+router.put('/payouts/:payoutId/paid', adminController.markPayoutAsPaid);
+
 export { router as adminRoutes };
 

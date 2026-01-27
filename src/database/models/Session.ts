@@ -6,6 +6,7 @@ const VerifySessionSchema = new Schema(
         token: { type: String },
         email: { type: String },
         otp: { type: String },
+        metadata: { type: Schema.Types.Mixed },
     },
     {
         timestamps: true,

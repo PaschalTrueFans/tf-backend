@@ -347,5 +347,82 @@ export class AdminController {
     }
     res.json(body);
   };
+
+  // Payout management
+  public getPayouts = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const status = (req.query.status as string) || undefined;
+      const search = (req.query.search as string) || undefined;
+
+      const response = await service.GetPayouts({ page, limit, status, search });
+      body = { data: response };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  public approvePayout = async (req: Request, res: Response): Promise<void> => {
+    let body;
+    try {
+      const { payoutId } = req.params;
+      const adminId = req.userId as string;
+
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      await service.ApprovePayout(payoutId, adminId);
+      body = { message: 'Payout approved successfully' };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  public rejectPayout = async (req: RequestBody<{ reason: string }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const { payoutId } = req.params;
+      const { reason } = req.body;
+      const adminId = req.userId as string;
+
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      await service.RejectPayout(payoutId, adminId, reason);
+      body = { message: 'Payout rejected successfully' };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
+
+  public markPayoutAsPaid = async (req: RequestBody<{ providerDetails?: any }>, res: Response): Promise<void> => {
+    let body;
+    try {
+      const { payoutId } = req.params;
+      const { providerDetails } = req.body;
+      const adminId = req.userId as string;
+
+      const db = res.locals.db as Db;
+      const service = new AdminService({ db });
+
+      await service.MarkPayoutAsPaid(payoutId, adminId, providerDetails);
+      body = { message: 'Payout marked as paid successfully' };
+    } catch (error) {
+      genericError(error, res);
+      return;
+    }
+    res.json(body);
+  };
 }
 

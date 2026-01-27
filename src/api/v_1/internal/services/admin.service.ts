@@ -647,5 +647,158 @@ export class AdminService {
       throw error;
     }
   }
+
+  // Payout Management
+  async GetPayouts(filters: AdminModel.AdminPayoutListFilters): Promise<AdminModel.AdminPayoutListResponse> {
+    try {
+      Logger.info('AdminService.GetPayouts', filters);
+
+      const page = filters.page ?? 1;
+      const limit = filters.limit ?? 10;
+
+      const { payouts, total } = await this.db.v1.Wallet.GetAllPayouts({
+        page,
+        limit,
+        status: filters.status as any,
+        search: filters.search,
+      });
+
+      const items: AdminModel.AdminPayoutListItem[] = payouts.map((p) => ({
+        id: p.id,
+        userId: p.userId?._id?.toString() || p.userId,
+        userName: p.userId?.name,
+        userEmail: p.userId?.email,
+        amount: p.amount,
+        currency: p.currency,
+        status: p.status,
+        paymentDetails: p.paymentDetails,
+        createdAt: p.createdAt,
+        reviewedAt: p.reviewedAt,
+        paidAt: p.paidAt,
+      }));
+
+      return {
+        payouts: items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    } catch (error) {
+      Logger.error('AdminService.GetPayouts Error', error);
+      throw error;
+    }
+  }
+
+  async ApprovePayout(payoutId: string, adminId: string): Promise<void> {
+    try {
+      Logger.info('AdminService.ApprovePayout', { payoutId, adminId });
+
+      const payout = await this.db.v1.Wallet.GetPayoutById(payoutId);
+      if (!payout) throw new AppError(404, 'Payout request not found');
+      if (payout.status !== 'pending') throw new AppError(400, `Cannot approve payout with status ${payout.status}`);
+
+      // Balance was already deducted at request time in this new flow.
+      // Just update payout status and transaction status.
+
+      // Update payout status
+      await this.db.v1.Wallet.UpdatePayoutStatus(payoutId, {
+        status: 'approved',
+        reviewedBy: adminId,
+        reviewedAt: new Date().toISOString()
+      });
+
+      // Update wallet transaction status
+      await this.db.v1.Wallet.UpdateTransactionByPayoutId(payoutId, { status: 'COMPLETED' });
+
+      // In a real app, update the global Transaction model status too if needed.
+      // But for now, simple implementation.
+
+      Logger.info('Payout approved', { payoutId, userId: payout.userId });
+    } catch (error) {
+      Logger.error('AdminService.ApprovePayout Error', error);
+      throw error;
+    }
+  }
+
+  async RejectPayout(payoutId: string, adminId: string, reason: string): Promise<void> {
+    try {
+      Logger.info('AdminService.RejectPayout', { payoutId, adminId, reason });
+
+      const payout = await this.db.v1.Wallet.GetPayoutById(payoutId);
+      if (!payout) throw new AppError(404, 'Payout request not found');
+      if (payout.status !== 'pending' && payout.status !== 'processing') {
+        throw new AppError(400, `Cannot reject payout with status ${payout.status}`);
+      }
+
+      // 1. Update payout status
+      await this.db.v1.Wallet.UpdatePayoutStatus(payoutId, {
+        status: 'rejected',
+        reviewedBy: adminId,
+        reviewedAt: new Date().toISOString(),
+        reviewNote: reason
+      });
+
+      // 2. REFUND the balance (since it was deducted at request time)
+      await this.db.v1.Wallet.IncrementBalance(payout.userId, { usd: payout.amount });
+
+      // 3. Update or create transaction record for refund
+      await this.db.v1.Wallet.UpdateTransactionByPayoutId(payoutId, { status: 'FAILED', metadata: { rejectionReason: reason } });
+
+      const wallet = await this.db.v1.Wallet.GetWallet(payout.userId);
+      await this.db.v1.Wallet.CreateTransaction({
+        walletId: wallet?.id,
+        type: 'DEPOSIT', // Or a new type 'PAYOUT_REFUND'
+        amount: payout.amount,
+        currency: 'USD',
+        status: 'COMPLETED',
+        metadata: { note: 'Payout rejected refund', payoutId: payout.id }
+      });
+
+      Logger.info('Payout rejected and funds refunded', { payoutId, userId: payout.userId });
+    } catch (error) {
+      Logger.error('AdminService.RejectPayout Error', error);
+      throw error;
+    }
+  }
+
+  async MarkPayoutAsPaid(payoutId: string, adminId: string, providerDetails?: any): Promise<void> {
+    try {
+      Logger.info('AdminService.MarkPayoutAsPaid', { payoutId, adminId });
+
+      const payout = await this.db.v1.Wallet.GetPayoutById(payoutId);
+      if (!payout) throw new AppError(404, 'Payout request not found');
+      if (payout.status !== 'approved' && payout.status !== 'processing') {
+        throw new AppError(400, `Cannot mark payout as paid with status ${payout.status}`);
+      }
+
+      await this.db.v1.Wallet.UpdatePayoutStatus(payoutId, {
+        status: 'completed',
+        paidBy: adminId,
+        paidAt: new Date().toISOString(),
+        provider: providerDetails?.provider,
+        providerTransferId: providerDetails?.transferId,
+        providerResponse: providerDetails?.response
+      });
+
+      // Send notification to user? 
+      const notification: Partial<Entities.Notification> = {
+        userId: payout.userId,
+        title: 'Payout Completed',
+        message: `Your payout request for $${payout.amount.toFixed(2)} has been processed and paid.`,
+        redirectUrl: '/dashboard/wallet',
+        fromUserId: adminId,
+        type: 'member',
+        isRead: false,
+      };
+      await this.db.v1.User.CreateNotification(notification);
+
+    } catch (error) {
+      Logger.error('AdminService.MarkPayoutAsPaid Error', error);
+      throw error;
+    }
+  }
 }
 

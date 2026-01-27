@@ -68,6 +68,7 @@ export interface verifyOtp {
   id: string;
   userId: string;
   otp: string;
+  metadata?: any;
   createdAt: string;
   updatedAt: string;
 }
@@ -349,6 +350,9 @@ export interface Wallet extends DefaultTable {
   userId: string;
   coinBalance: number;
   usdBalance: number;
+  paymentDetails?: PaymentDetails;
+  payoutUpdateSecurity: boolean;
+  // Legacy field for backward compatibility
   bankDetails?: {
     accountName: string;
     accountNumber: string;
@@ -357,8 +361,53 @@ export interface Wallet extends DefaultTable {
   };
 }
 
-export type TransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'PURCHASE_COINS' | 'GIFT_SEND' | 'GIFT_RECEIVE' | 'PRODUCT_SALE';
+export interface Payout extends DefaultTable {
+  userId: string;
+  walletId: string;
+  amount: number;
+  currency: string;
+  status: PayoutStatus;
+  paymentDetails?: PaymentDetails;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  paidAt?: string;
+  paidBy?: string;
+  provider?: string;
+  providerTransferId?: string;
+  providerResponse?: any;
+}
+
+export type TransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'PURCHASE_COINS' | 'GIFT_SEND' | 'GIFT_RECEIVE' | 'PRODUCT_SALE' | 'PAYOUT';
 export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
+
+// Payment/Payout types
+export type PaymentMethod = 'bank_us' | 'bank_international' | 'paypal';
+export type AccountHolderType = 'individual' | 'company';
+export type AccountType = 'checking' | 'savings';
+export type PayoutStatus = 'pending' | 'approved' | 'rejected' | 'processing' | 'completed' | 'failed';
+
+export interface PaymentDetails {
+  accountHolderName?: string;
+  accountHolderType?: AccountHolderType;
+  accountNumber?: string;
+  routingNumber?: string;           // US ACH routing number
+  accountType?: AccountType;
+  swiftBic?: string;                // International SWIFT/BIC
+  iban?: string;                    // International Bank Account Number
+  bankName?: string;
+  bankAddress?: string;
+  bankCity?: string;
+  bankCountry?: string;
+  bankPostalCode?: string;
+  beneficiaryAddress?: string;
+  beneficiaryCity?: string;
+  beneficiaryState?: string;
+  beneficiaryCountry?: string;
+  beneficiaryPostalCode?: string;
+  paypalEmail?: string;
+  paymentMethod?: PaymentMethod;
+}
 
 export interface WalletTransaction extends DefaultTable {
   walletId: string;
@@ -367,6 +416,7 @@ export interface WalletTransaction extends DefaultTable {
   currency: 'USD' | 'COIN';
   relatedUserId?: string;
   orderId?: string;          // Link to order for product sales
+  payoutId?: string;         // Link to payout for withdrawals
   status: TransactionStatus;
   metadata?: any;
 }

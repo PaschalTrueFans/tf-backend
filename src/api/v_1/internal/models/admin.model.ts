@@ -182,3 +182,34 @@ export interface AdminCreateEmailBroadcastDto {
   message: string;
 }
 
+export interface AdminPayoutListItem {
+  id: string;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  amount: number;
+  currency: string;
+  status: string;
+  paymentDetails?: any;
+  createdAt: string;
+  reviewedAt?: string;
+  paidAt?: string;
+}
+
+export interface AdminPayoutListFilters {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+}
+
+export interface AdminPayoutListResponse {
+  payouts: AdminPayoutListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+

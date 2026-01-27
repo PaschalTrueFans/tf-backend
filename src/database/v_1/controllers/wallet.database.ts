@@ -3,6 +3,7 @@ import { Entities } from '../../../helpers';
 import { Logger } from '../../../helpers/logger';
 import { WalletModel } from '../../models/Wallet';
 import { WalletTransactionModel } from '../../models/WalletTransaction';
+import { PayoutModel } from '../../models/Payout';
 
 export class WalletDatabase {
     private logger: typeof Logger;
@@ -30,18 +31,9 @@ export class WalletDatabase {
     }
 
     async UpdateWalletBalance(userId: string, updates: { coinBalance?: number; usdBalance?: number }): Promise<Entities.Wallet | null> {
-        // We use $inc for atomic updates if possible, but here we might pass absolute values or deltas.
-        // For safety, let's assume the controller calculates the new balance or we use $inc.
-        // However, to ensure data integrity, strictly using $inc is better.
-        // But keeping it simple for now, matching the generic update style.
-        // Wait, for money, $inc is safer.
-
         const updateQuery: any = {};
         if (updates.coinBalance !== undefined) updateQuery.coinBalance = updates.coinBalance;
         if (updates.usdBalance !== undefined) updateQuery.usdBalance = updates.usdBalance;
-
-        // NOTE: This replaces the balance. 
-        // Ideally we should have Add/Subtract methods.
 
         const wallet = await WalletModel.findOneAndUpdate({ userId }, updateQuery, { new: true });
         return wallet ? (wallet.toJSON() as Entities.Wallet) : null;
@@ -53,6 +45,24 @@ export class WalletDatabase {
         if (inc.usd) update.$inc.usdBalance = inc.usd;
 
         const wallet = await WalletModel.findOneAndUpdate({ userId }, update, { new: true });
+        return wallet ? (wallet.toJSON() as Entities.Wallet) : null;
+    }
+
+    async SetPaymentDetails(userId: string, details: Entities.PaymentDetails): Promise<Entities.Wallet | null> {
+        const wallet = await WalletModel.findOneAndUpdate(
+            { userId },
+            { $set: { paymentDetails: details } },
+            { new: true }
+        );
+        return wallet ? (wallet.toJSON() as Entities.Wallet) : null;
+    }
+
+    async SetPayoutSecurity(userId: string, enabled: boolean): Promise<Entities.Wallet | null> {
+        const wallet = await WalletModel.findOneAndUpdate(
+            { userId },
+            { $set: { payoutUpdateSecurity: enabled } },
+            { new: true }
+        );
         return wallet ? (wallet.toJSON() as Entities.Wallet) : null;
     }
 
@@ -87,5 +97,59 @@ export class WalletDatabase {
         ]);
 
         return { transactions: transactions as unknown as Entities.WalletTransaction[], total };
+    }
+
+    async UpdateTransactionByPayoutId(payoutId: string, updates: Partial<Entities.WalletTransaction>): Promise<void> {
+        await WalletTransactionModel.findOneAndUpdate({ payoutId }, { $set: updates });
+    }
+
+    // Payout Methods
+    async CreatePayout(data: Partial<Entities.Payout>): Promise<Entities.Payout> {
+        const payout = await PayoutModel.create(data);
+        return payout.toJSON() as Entities.Payout;
+    }
+
+    async GetPayoutById(id: string): Promise<Entities.Payout | null> {
+        const payout = await PayoutModel.findById(id);
+        return payout ? (payout.toJSON() as Entities.Payout) : null;
+    }
+
+    async GetPayoutsByUser(userId: string, params: { page?: number; limit?: number; status?: string }): Promise<{ payouts: Entities.Payout[]; total: number }> {
+        const { page = 1, limit = 10, status } = params;
+        const query: any = { userId };
+        if (status) query.status = status;
+
+        const [payouts, total] = await Promise.all([
+            PayoutModel.find(query)
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit),
+            PayoutModel.countDocuments(query),
+        ]);
+        return { payouts: payouts as unknown as Entities.Payout[], total };
+    }
+
+    async GetAllPayouts(params: { page?: number; limit?: number; status?: string; search?: string }): Promise<{ payouts: any[]; total: number }> {
+        const { page = 1, limit = 10, status, search } = params;
+        const query: any = {};
+        if (status) query.status = status;
+
+        // Search by userId or amount if needed, but usually status and pagination is enough
+
+        const [payouts, total] = await Promise.all([
+            (PayoutModel.find(query)
+                .sort({ createdAt: -1 }) as any)
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .populate('userId', 'name email'),
+            PayoutModel.countDocuments(query),
+        ]);
+
+        return { payouts: payouts as any[], total };
+    }
+
+    async UpdatePayoutStatus(id: string, updates: Partial<Entities.Payout>): Promise<Entities.Payout | null> {
+        const payout = await PayoutModel.findByIdAndUpdate(id, { $set: updates }, { new: true });
+        return payout ? (payout.toJSON() as Entities.Payout) : null;
     }
 }

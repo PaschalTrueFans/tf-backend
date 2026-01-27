@@ -39,21 +39,34 @@ const PaymentDetailsSchema = new Schema(
     { _id: false }
 );
 
-const WalletSchema = new Schema(
+const PayoutSchema = new Schema(
     {
-        userId: { type: String, required: true, ref: 'User', unique: true },
-        coinBalance: { type: Number, default: 0 },
-        usdBalance: { type: Number, default: 0 },
-        payoutUpdateSecurity: { type: Boolean, default: true },
-        // New comprehensive payment details
-        paymentDetails: { type: PaymentDetailsSchema },
-        // Legacy field for backward compatibility
-        bankDetails: {
-            accountName: { type: String },
-            accountNumber: { type: String },
-            bankName: { type: String },
-            bankCode: { type: String },
+        userId: { type: String, required: true, ref: 'User' },
+        walletId: { type: String, required: true, ref: 'Wallet' },
+        amount: { type: Number, required: true },
+        currency: { type: String, default: 'USD' },
+        status: {
+            type: String,
+            enum: ['pending', 'approved', 'rejected', 'processing', 'completed', 'failed'],
+            default: 'pending',
         },
+
+        // Payment details snapshot (copied from wallet at request time)
+        paymentDetails: { type: PaymentDetailsSchema },
+
+        // Admin actions
+        reviewedBy: { type: String, ref: 'Admin' },
+        reviewedAt: { type: Date },
+        reviewNote: { type: String },
+
+        // Disbursement tracking
+        paidAt: { type: Date },
+        paidBy: { type: String, ref: 'Admin' },
+
+        // For future automation (Stripe Connect, Paystack, etc.)
+        provider: { type: String },
+        providerTransferId: { type: String },
+        providerResponse: { type: Schema.Types.Mixed },
     },
     {
         timestamps: true,
@@ -68,4 +81,9 @@ const WalletSchema = new Schema(
     }
 );
 
-export const WalletModel = mongoose.model<Entities.Wallet>('Wallet', WalletSchema as any);
+// Indexes for efficient queries
+PayoutSchema.index({ userId: 1, createdAt: -1 });
+PayoutSchema.index({ status: 1, createdAt: -1 });
+PayoutSchema.index({ reviewedBy: 1 });
+
+export const PayoutModel = mongoose.model<Entities.Payout>('Payout', PayoutSchema as any);

@@ -135,6 +135,10 @@ Once the server is running, you can access the API documentation at:
 http://localhost:3000/api-docs
 ```
 
+## 💰 Creator Payout System
+
+For detailed instructions on how to integrate the Creator Payout/Withdrawal system, see [creator_payouts_integration.md](./creator_payouts_integration.md).
+
 ## 🤝 Contributing
 
 1. Fork the repository

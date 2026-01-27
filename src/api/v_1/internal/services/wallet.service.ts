@@ -2,6 +2,8 @@ import { Db } from '../../../../database/db';
 import { AppError } from '../../../../helpers/errors';
 import { Logger } from '../../../../helpers/logger';
 import { Entities, stripeService } from '../../../../helpers';
+import { generateRandomOTP } from '../../../../helpers/generateRandomOTP';
+import { EmailService } from '../../../../helpers/email';
 
 export class WalletService {
     private db: Db;
@@ -18,6 +20,11 @@ export class WalletService {
             if (!wallet) throw new AppError(404, 'Wallet not found');
         }
         return wallet;
+    }
+
+    public async GetPaymentDetails(userId: string): Promise<Entities.PaymentDetails | null> {
+        const wallet = await this.GetWallet(userId);
+        return wallet.paymentDetails || null;
     }
 
     public async CreateCoinCheckoutSession(
@@ -245,40 +252,120 @@ export class WalletService {
         Logger.info('Coins converted to USD balance', { userId, coinAmount, usdAmount });
     }
 
-    public async InitiateUSDPayout(userId: string, usdAmount: number): Promise<void> {
+    public async InitiateUSDPayout(userId: string, usdAmount: number): Promise<Entities.Payout> {
         const wallet = await this.db.v1.Wallet.GetWallet(userId);
-        if (!wallet || wallet.usdBalance < usdAmount) {
-            throw new AppError(400, 'Insufficient USD balance for payout');
+        if (!wallet) throw new AppError(404, 'Wallet not found');
+
+        // Check if payment details are set
+        if (!wallet.paymentDetails && !wallet.bankDetails) {
+            throw new AppError(400, 'Please set your payment details first');
         }
 
-        // In a real app with Stripe Connect:
-        // const payout = await stripe.payouts.create({ amount: usdAmount * 100, currency: 'usd' }, { stripeAccount: creatorStripeAccountId });
+        // Validate balance
+        if (wallet.usdBalance < usdAmount) {
+            throw new AppError(400, 'Insufficient USD balance');
+        }
 
-        // For now, we deduct from balance and mark as pending/succeeded
+        // 1. Deduct USD balance immediately
         await this.db.v1.Wallet.IncrementBalance(userId, { usd: -usdAmount });
 
-        await this.db.v1.Wallet.CreateTransaction({
+        // 2. Create payout record with status 'pending'
+        const payout = await this.db.v1.Wallet.CreatePayout({
+            userId,
             walletId: wallet.id,
-            type: 'WITHDRAWAL', // Using WITHDRAWAL for payout too, or could add PAYOUT
             amount: usdAmount,
             currency: 'USD',
-            status: 'COMPLETED',
-            metadata: { note: 'Payout to external account initiated' }
+            status: 'pending',
+            paymentDetails: wallet.paymentDetails || (wallet.bankDetails ? {
+                accountHolderName: wallet.bankDetails.accountName,
+                accountNumber: wallet.bankDetails.accountNumber,
+                bankName: wallet.bankDetails.bankName,
+                paymentMethod: 'bank_us' // Fallback for legacy bankDetails
+            } : undefined)
         });
 
-        // Mirror in TransactionModel
+        // 3. Record pending transaction
+        await this.db.v1.Wallet.CreateTransaction({
+            walletId: wallet.id,
+            type: 'PAYOUT',
+            amount: usdAmount,
+            currency: 'USD',
+            status: 'PENDING',
+            payoutId: payout.id,
+            metadata: { note: 'Payout request submitted' }
+        });
+
+        // 4. Mirror in global TransactionModel (as pending)
         await this.db.v1.User.CreateTransaction({
             subscriberId: userId,
             creatorId: 'SYSTEM',
             amount: usdAmount,
             currency: 'USD',
-            transactionType: 'adjustment', // Payout is an adjustment from system to user? Or adjustment type.
-            status: 'succeeded',
-            description: `Payout of $${usdAmount.toFixed(2)} USD`,
-            metadata: { type: 'PAYOUT' }
+            transactionType: 'adjustment',
+            status: 'pending',
+            description: `Payout request for $${usdAmount.toFixed(2)} USD`,
+            metadata: { type: 'PAYOUT', payoutId: payout.id }
         });
 
-        Logger.info('USD Payout initiated', { userId, usdAmount });
+        Logger.info('USD Payout requested and balance deducted', { userId, usdAmount, payoutId: payout.id });
+        return payout;
+    }
+
+    public async GetUserPayouts(userId: string, page: number = 1, limit: number = 10): Promise<{ payouts: Entities.Payout[]; total: number }> {
+        return await this.db.v1.Wallet.GetPayoutsByUser(userId, { page, limit });
+    }
+
+    public async UpdatePaymentDetails(userId: string, details: Entities.PaymentDetails): Promise<{ otpRequired: boolean }> {
+        const wallet = await this.db.v1.Wallet.GetWallet(userId);
+        if (!wallet) throw new AppError(404, 'Wallet not found');
+
+        // Logic: 
+        // 1. If no existing payment details, or security is disabled, just update.
+        // 2. If existing details and security is enabled, send OTP.
+
+        const hasExistingDetails = !!(wallet.paymentDetails?.paymentMethod || wallet.bankDetails?.accountNumber);
+
+        if (!hasExistingDetails || !wallet.payoutUpdateSecurity) {
+            const updated = await this.db.v1.Wallet.SetPaymentDetails(userId, details);
+            if (!updated) throw new AppError(500, 'Failed to update payment details');
+            Logger.info('Payment details updated directly (no OTP)', { userId });
+            return { otpRequired: false };
+        }
+
+        // Security enabled: Send OTP
+        const user = await this.db.v1.User.GetUser({ id: userId });
+        if (!user) throw new AppError(404, 'User not found');
+
+        const otp = generateRandomOTP(6);
+        await this.db.v1.Auth.StoreSessionToken({ userId, otp, metadata: details });
+
+        const emailService = new EmailService();
+        await emailService.SendMail(user.email, `Your OTP to update payment details is: ${otp}. This code expires in 10 minutes.`);
+
+        Logger.info('Payment detail update OTP sent', { userId });
+        return { otpRequired: true };
+    }
+
+    public async ConfirmPaymentDetailsUpdate(userId: string, otp: string): Promise<void> {
+        const session = await this.db.v1.Auth.GetSession({ userId, otp });
+        if (!session || !session.metadata) {
+            throw new AppError(400, 'Invalid or expired OTP');
+        }
+
+        const details = session.metadata as Entities.PaymentDetails;
+        const updated = await this.db.v1.Wallet.SetPaymentDetails(userId, details);
+        if (!updated) throw new AppError(500, 'Failed to update payment details');
+
+        // Clear session
+        await this.db.v1.Auth.DeleteSession({ id: session.id });
+
+        Logger.info('Payment details updated after OTP verification', { userId });
+    }
+
+    public async TogglePayoutSecurity(userId: string, enabled: boolean): Promise<void> {
+        const updated = await this.db.v1.Wallet.SetPayoutSecurity(userId, enabled);
+        if (!updated) throw new AppError(500, 'Failed to update security settings');
+        Logger.info('Payout security toggle', { userId, enabled });
     }
 
     public async LinkBankDetails(userId: string, details: NonNullable<Entities.Wallet['bankDetails']>): Promise<void> {
