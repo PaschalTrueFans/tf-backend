@@ -9,6 +9,8 @@ const CommunitySchema = new Schema(
         banner: { type: String },
         isPrivate: { type: Boolean, default: false },
         rules: { type: String },
+        isVerified: { type: Boolean, default: false },
+        isBlocked: { type: Boolean, default: false },
     },
     {
         timestamps: true,

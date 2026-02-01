@@ -6,7 +6,7 @@ const WalletTransactionSchema = new Schema(
         walletId: { type: String, required: true, ref: 'Wallet' },
         type: {
             type: String,
-            enum: ['DEPOSIT', 'WITHDRAWAL', 'PURCHASE_COINS', 'GIFT_SEND', 'GIFT_RECEIVE', 'PRODUCT_SALE', 'PAYOUT'],
+            enum: ['DEPOSIT', 'WITHDRAWAL', 'PURCHASE_COINS', 'GIFT_SEND', 'GIFT_RECEIVE', 'PRODUCT_SALE', 'PAYOUT', 'REFUND', 'ADJUSTMENT'],
             required: true
         },
         amount: { type: Number, required: true },
