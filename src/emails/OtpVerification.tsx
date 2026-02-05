@@ -22,12 +22,12 @@ export const OtpVerification = ({
     return (
         <Html>
             <Head />
-            <Preview>Your verification code for True Fans</Preview>
+            <Preview>Your verification code for Ruutz</Preview>
             <Body style={styles.body}>
                 <Container style={styles.container}>
                     {/* HEADER */}
                     <Section style={styles.headerSection}>
-                        <Text style={styles.brand}>True Fans</Text>
+                        <Text style={styles.brand}>Ruutz</Text>
                     </Section>
 
                     {/* CONTENT */}
@@ -81,7 +81,7 @@ export const OtpVerification = ({
                         </Text>
 
                         <Text style={styles.copyright}>
-                            © {new Date().getFullYear()} True Fans. All rights reserved.
+                            © {new Date().getFullYear()} Ruutz. All rights reserved.
                         </Text>
                     </Section>
                 </Container>

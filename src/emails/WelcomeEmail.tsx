@@ -34,14 +34,14 @@ export const WelcomeEmail = ({
         <Html>
             <Head />
             <Preview>
-                Welcome to True Fans — Start building your community today.
+                Welcome to Ruutz — Start building your community today.
             </Preview>
 
             <Body style={styles.body}>
                 <Container style={styles.container}>
                     {/* HEADER */}
                     <Section style={styles.headerSection}>
-                        <Text style={styles.brand}>True Fans</Text>
+                        <Text style={styles.brand}>Ruutz</Text>
                     </Section>
 
                     {/* CONTENT */}
@@ -49,7 +49,7 @@ export const WelcomeEmail = ({
                         <Text style={styles.hi}>Hi {name},</Text>
 
                         <Text style={styles.paragraph}>
-                            Welcome to <strong>True Fans</strong>. This is your space to grow
+                            Welcome to <strong>Ruutz</strong>. This is your space to grow
                             an engaged audience, earn directly from your creativity, and build
                             a community that truly supports you.
                         </Text>
@@ -197,7 +197,7 @@ export const WelcomeEmail = ({
                         </Text>
 
                         <Text style={styles.copyright}>
-                            © {new Date().getFullYear()} True Fans. All rights reserved.
+                            © {new Date().getFullYear()} Ruutz. All rights reserved.
                         </Text>
                     </Section>
                 </Container>

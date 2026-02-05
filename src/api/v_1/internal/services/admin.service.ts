@@ -712,7 +712,7 @@ export class AdminService {
         const userIds = await this.db.v1.User.GetAllUserIds();
 
         // Use adminId as fromUserId, or use a system user ID if adminId is null
-        const adminUser = await this.db.v1.User.GetUserByEmail('admin@truefans.ng');
+        const adminUser = await this.db.v1.User.GetUserByEmail('admin@ruutz.com');
         const fromUserId = adminUser?.id || userIds[0] || ''; // Fallback to first user if no admin
 
         // Process notifications in batches to avoid overwhelming the database connection pool

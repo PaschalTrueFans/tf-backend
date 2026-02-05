@@ -68,7 +68,7 @@ export class EmailService {
       const info = await this.transporter.sendMail({
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
-        subject: 'Verify Your Email Address - TRUE FANS',
+        subject: 'Verify Your Email Address - RUUTZ',
         html: emailHtml,
       });
 
@@ -116,7 +116,7 @@ export class EmailService {
       const info = await this.transporter.sendMail({
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
-        subject: 'Welcome to TRUE FANS! 🎉',
+        subject: 'Welcome to RUUTZ! 🎉',
         html: emailHtml,
       });
 
@@ -137,7 +137,7 @@ export class EmailService {
       const info = await this.transporter.sendMail({
         from: `"${SMTP.FROM_NAME}" <${SMTP.FROM_EMAIL}>`,
         to: email,
-        subject: 'Your Password Has Been Changed - TRUE FANS',
+        subject: 'Your Password Has Been Changed - RUUTZ',
         html: emailHtml,
       });
 

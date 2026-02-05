@@ -23,12 +23,12 @@ export const EmailVerification = ({
     return (
         <Html>
             <Head />
-            <Preview>Verify your email address for True Fans</Preview>
+            <Preview>Verify your email address for Ruutz</Preview>
             <Body style={styles.body}>
                 <Container style={styles.container}>
                     {/* HEADER */}
                     <Section style={styles.headerSection}>
-                        <Text style={styles.brand}>True Fans</Text>
+                        <Text style={styles.brand}>Ruutz</Text>
                     </Section>
 
                     {/* CONTENT */}
@@ -36,7 +36,7 @@ export const EmailVerification = ({
                         <Text style={styles.hi}>Verify your email address</Text>
 
                         <Text style={styles.paragraph}>
-                            Thanks for starting your True Fans account. We want to make sure
+                            Thanks for starting your Ruutz account. We want to make sure
                             it's really you. Please click the button below to verify your
                             email address.
                         </Text>
@@ -70,7 +70,7 @@ export const EmailVerification = ({
                         </Text>
 
                         <Text style={styles.copyright}>
-                            © {new Date().getFullYear()} True Fans. All rights reserved.
+                            © {new Date().getFullYear()} Ruutz. All rights reserved.
                         </Text>
                     </Section>
                 </Container>

@@ -32,7 +32,7 @@ export const PasswordChanged = ({
                 <Container style={styles.container}>
                     {/* HEADER */}
                     <Section style={styles.headerSection}>
-                        <Text style={styles.brand}>True Fans</Text>
+                        <Text style={styles.brand}>Ruutz</Text>
                     </Section>
 
                     {/* CONTENT */}
@@ -43,7 +43,7 @@ export const PasswordChanged = ({
                             Your Password Has Been Changed
                         </Text>
                         <Text style={styles.paragraph}>
-                            This is a confirmation that the password for your True Fans account
+                            This is a confirmation that the password for your Ruutz account
                             has been successfully changed.
                         </Text>
 
@@ -103,7 +103,7 @@ export const PasswordChanged = ({
                         </Text>
 
                         <Text style={styles.copyright}>
-                            © {new Date().getFullYear()} True Fans. All rights reserved.
+                            © {new Date().getFullYear()} Ruutz. All rights reserved.
                         </Text>
                     </Section>
                 </Container>
